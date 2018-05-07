@@ -26,7 +26,7 @@
 !> Auckland, the University of Oxford and King's College, London.
 !> All Rights Reserved.
 !>
-!> Contributor(s): Chris Bradley
+!> Contributor(s): Chris Bradley, Elias Ghadam Soltani
 !>
 !> Alternatively, the contents of this file may be used under the terms of
 !> either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -91,6 +91,21 @@ MODULE BOUNDARY_CONDITIONS_ROUTINES
   INTEGER(INTG), PARAMETER :: BOUNDARY_CONDITION_DOF_MIXED=2 !<The dof is set as a mixed boundary condition. \see BOUNDARY_CONDITIONS_ROUTINES_BoundaryConditions,BOUNDARY_CONDITIONS_ROUTINES
   INTEGER(INTG), PARAMETER :: BOUNDARY_CONDITION_DOF_CONSTRAINED=3 !<The dof is constrained to be a linear combination of other DOFs. \see BOUNDARY_CONDITIONS_ROUTINES_BoundaryConditions,BOUNDARY_CONDITIONS_ROUTINES
   !>@}
+
+!ELIAS
+  INTEGER(INTG), PARAMETER :: NO_BOUNDARY=0 !<The dof is free.  
+  INTEGER(INTG), PARAMETER :: DIRICHLET_BOUNDARY_CONDITION=1 !<The node boundary condition is dirichlet type.
+  INTEGER(INTG), PARAMETER :: NEUMANN_BOUNDARY_CONDITION=2 !<The node boundary condition is Neumann type.
+  INTEGER(INTG), PARAMETER :: ROBIN_BOUNDARY_CONDITION=3 !<The node boundary condition is Robin type.
+
+  INTEGER(INTG), PARAMETER :: BOUNDARY_CONDITION_NONE=0 !<The dof is free.
+  INTEGER(INTG), PARAMETER :: BOUNDARY_CONDITION_DOFTYPE_DIRICHLET=1 !<The node boundary condition is dirichlet type. 
+  INTEGER(INTG), PARAMETER :: BOUNDARY_CONDITION_DOFTYPE_NEUMANN=2  !<The node boundary condition is Neumann type.
+  INTEGER(INTG), PARAMETER :: BOUNDARY_CONDITION_DOFTYPE_POINT_NEUMANN=3  !<The node boundary condition is point Neumann type.
+  INTEGER(INTG), PARAMETER :: BOUNDARY_CONDITION_DOFTYPE_ROBIN=4  !<The node boundary condition is Robin type.
+  INTEGER(INTG), PARAMETER :: BOUNDARY_CONDITION_DOFTYPE_POINT_ROBIN=5  !<The node boundary condition is point Robin type.
+  INTEGER(INTG), PARAMETER :: BOUNDARY_CONDITION_DOFTYPE_CAUCHY=6  !<The node boundary condition is Cauchy type.
+
   !> \addtogroup BOUNDARY_CONDITIONS_ROUTINES_BoundaryConditions BOUNDARY_CONDITIONS_ROUTINES::BoundaryConditions
   !> \brief Boundary conditions types. These may be specific to a particular equation type and the solver routines should not need to use these.
   !>@{
@@ -147,9 +162,16 @@ MODULE BOUNDARY_CONDITIONS_ROUTINES
 
   !>Sets a boundary condition on the specified local DOF.
   INTERFACE BOUNDARY_CONDITIONS_SET_LOCAL_DOF
+    MODULE PROCEDURE BOUNDARY_CONDITIONS_SET_LOCAL_DOF0
     MODULE PROCEDURE BOUNDARY_CONDITIONS_SET_LOCAL_DOF1
     MODULE PROCEDURE BOUNDARY_CONDITIONS_SET_LOCAL_DOFS
   END INTERFACE !BOUNDARY_CONDITIONS_SET_LOCAL_DOF
+
+  !>Sets a boundary condition on the specified Node. 
+  INTERFACE BOUNDARY_CONDITIONS_SET_NODE
+    MODULE PROCEDURE BOUNDARY_CONDITIONS_SET_NODE0
+    MODULE PROCEDURE BOUNDARY_CONDITIONS_SET_NODE1
+  END INTERFACE !BOUNDARY_CONDITIONS_SET_Node
 
   PUBLIC BOUNDARY_CONDITION_DOF_FREE,BOUNDARY_CONDITION_DOF_FIXED,BOUNDARY_CONDITION_DOF_MIXED,BOUNDARY_CONDITION_DOF_CONSTRAINED
 
@@ -171,9 +193,10 @@ MODULE BOUNDARY_CONDITIONS_ROUTINES
     & BOUNDARY_CONDITIONS_ADD_NODE,BOUNDARY_CONDITIONS_VARIABLE_GET
 
   PUBLIC BOUNDARY_CONDITIONS_SET_CONSTANT,BOUNDARY_CONDITIONS_SET_LOCAL_DOF,BOUNDARY_CONDITIONS_SET_ELEMENT, &
-    & BOUNDARY_CONDITIONS_SET_NODE,BoundaryConditions_NeumannIntegrate,BoundaryConditions_NeumannSparsityTypeSet
+    & BOUNDARY_CONDITIONS_SET_NODE,BoundaryConditions_NeumannIntegrate,BoundaryConditions_NeumannSparsityTypeSet, &
+    & BoundaryConditions_RobinSparsityTypeSet,BoundaryConditions_RobinIntegrate
 
-  PUBLIC BoundaryConditions_ConstrainNodeDofsEqual
+  PUBLIC BoundaryConditions_ConstrainNodeDofsEqual!,BoundaryConditionsValuesSet
 
 CONTAINS
 
@@ -192,7 +215,7 @@ CONTAINS
     INTEGER(INTG) :: MPI_IERROR,SEND_COUNT,STORAGE_TYPE, NUMBER_OF_NON_ZEROS, NUMBER_OF_ROWS,COUNT
     INTEGER(INTG) :: variable_idx,dof_idx, equ_matrix_idx, dirichlet_idx, row_idx, DUMMY, LAST, DIRICHLET_DOF
     INTEGER(INTG) :: col_idx,equations_set_idx,parameterSetIdx
-    INTEGER(INTG) :: pressureIdx,neumannIdx
+    INTEGER(INTG) :: pressureIdx,neumannIdx,robinIdx
     INTEGER(INTG), POINTER :: ROW_INDICES(:), COLUMN_INDICES(:)
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: BOUNDARY_CONDITION_VARIABLE
     TYPE(DOMAIN_MAPPING_TYPE), POINTER :: VARIABLE_DOMAIN_MAPPING
@@ -291,9 +314,15 @@ CONTAINS
                     CALL BoundaryConditions_NeumannInitialise(BOUNDARY_CONDITION_VARIABLE,ERR,ERROR,*999)
                   END IF
 
+                  ! Elias: Set up Robin condition information if there are any robin conditions
+                  IF(BOUNDARY_CONDITION_VARIABLE%DOF_COUNTS(BOUNDARY_CONDITION_ROBIN)>0) THEN
+                    CALL BoundaryConditions_robinInitialise(BOUNDARY_CONDITION_VARIABLE,ERR,ERROR,*999)
+                  END IF              
+
                   ! Loop over all global DOFs, keeping track of the dof indices of specific BC types where required
                   pressureIdx=1
                   neumannIdx=1
+                  robinIdx=1
                   DO dof_idx=1,FIELD_VARIABLE%NUMBER_OF_GLOBAL_DOFS
                     IF(BOUNDARY_CONDITION_VARIABLE%CONDITION_TYPES(dof_idx)== BOUNDARY_CONDITION_PRESSURE_INCREMENTED) THEN
                       BOUNDARY_CONDITIONS_PRESSURE_INCREMENTED%PRESSURE_INCREMENTED_DOF_INDICES(pressureIdx)=dof_idx
@@ -302,6 +331,9 @@ CONTAINS
                         & BOUNDARY_CONDITION_VARIABLE%CONDITION_TYPES(dof_idx)==BOUNDARY_CONDITION_NEUMANN_POINT_INCREMENTED) THEN
                       BOUNDARY_CONDITION_VARIABLE%neumannBoundaryConditions%setDofs(neumannIdx)=dof_idx
                       neumannIdx=neumannIdx+1
+                    ELSE IF(BOUNDARY_CONDITION_VARIABLE%CONDITION_TYPES(dof_idx)==BOUNDARY_CONDITION_ROBIN) THEN !Elias
+                      BOUNDARY_CONDITIONS%robinBoundaryConditions%setDofs(robinIdx)=dof_idx
+                      robinIdx=robinIdx+1
                     END IF
                   END DO
 
@@ -309,6 +341,11 @@ CONTAINS
                   IF(BOUNDARY_CONDITION_VARIABLE%DOF_COUNTS(BOUNDARY_CONDITION_NEUMANN_POINT)>0.OR. &
                       & BOUNDARY_CONDITION_VARIABLE%DOF_COUNTS(BOUNDARY_CONDITION_NEUMANN_POINT_INCREMENTED)>0) THEN
                     CALL BoundaryConditions_NeumannMatricesInitialise(BOUNDARY_CONDITION_VARIABLE,ERR,ERROR,*999)
+                  END IF
+
+                  ! Now that we know where Robin point DOFs are, we can calculate matrix structure
+                  IF(BOUNDARY_CONDITION_VARIABLE%DOF_COUNTS(BOUNDARY_CONDITION_ROBIN)>0) THEN
+                    CALL BoundaryConditions_RobinMatricesInitialise(BOUNDARY_CONDITION_VARIABLE,ERR,ERROR,*999)
                   END IF
 
                   ! Check that there is at least one dirichlet condition
@@ -799,7 +836,7 @@ CONTAINS
     INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
-    INTEGER(INTG) :: DUMMY_ERR,variable_idx,variable_type,equations_set_idx,interface_condition_idx
+    INTEGER(INTG) :: DUMMY_ERR,variable_idx,variable_type,equations_set_idx,interface_condition_idx,numberOfDofs
     TYPE(EquationsType), POINTER :: EQUATIONS
     TYPE(EquationsVectorType), POINTER :: vectorEquations
     TYPE(EQUATIONS_SET_TYPE), POINTER :: EQUATIONS_SET
@@ -827,6 +864,12 @@ CONTAINS
           SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%NUMBER_OF_BOUNDARY_CONDITIONS_VARIABLES=0
           SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%SOLVER_EQUATIONS=>SOLVER_EQUATIONS
           SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%neumannMatrixSparsity=BOUNDARY_CONDITION_SPARSE_MATRICES
+          numberOfDofs=solver_equations%solver_mapping%equations_sets(1)%ptr &
+            & %equations%vectorEquations%vectorMapping%numberOfRows
+          ALLOCATE(SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%rowBoundaryConditionsDofType(numberOfDofs),STAT=ERR) !225 is wrong Elias
+          IF(ERR/=0) CALL FlagError("Could not allocate global boundary condition types.",ERR,ERROR,*999)
+          SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%rowBoundaryConditionsDofType=0
+          CALL BoundaryConditions_ValuesInitialise(SOLVER_EQUATIONS%BOUNDARY_CONDITIONS,ERR,ERROR,*999) !Elias 
           DO equations_set_idx=1,SOLVER_EQUATIONS%SOLVER_MAPPING%NUMBER_OF_EQUATIONS_SETS
             EQUATIONS_SET=>SOLVER_EQUATIONS%SOLVER_MAPPING%EQUATIONS_SETS(equations_set_idx)%PTR
             IF(ASSOCIATED(EQUATIONS_SET)) THEN
@@ -1325,7 +1368,36 @@ CONTAINS
   !
   !================================================================================================================================
   !
+ 
+  !>Sets a boundary condition on the specified DOF.
+  SUBROUTINE BOUNDARY_CONDITIONS_SET_LOCAL_DOF0(BOUNDARY_CONDITIONS,FIELD,VARIABLE_TYPE,DOF_INDEX,CONDITION,VALUE,ERR,ERROR,*)
+    
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: BOUNDARY_CONDITIONS !<A pointer to the boundary conditions to set the boundary condition for
+    TYPE(FIELD_TYPE), POINTER :: FIELD !<The dependent field to set the boundary condition on.
+    INTEGER(INTG), INTENT(IN) :: VARIABLE_TYPE !<The variable type to set the boundary condition at
+    INTEGER(INTG), INTENT(IN) :: DOF_INDEX !<The local dof index to set the boundary condition at
+    INTEGER(INTG), INTENT(IN) :: CONDITION !<The boundary condition type to set \see BOUNDARY_CONDITIONS_ROUTINES_BoundaryConditions,BOUNDARY_CONDITIONS_ROUTINES
+    REAL(DP), INTENT(IN) :: VALUE !<The value of the boundary condition to set
+    INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
+    !Local Variables
 
+    ENTERS("BOUNDARY_CONDITIONS_SET_LOCAL_DOF0",ERR,ERROR,*999)
+
+    CALL BOUNDARY_CONDITIONS_SET_LOCAL_DOFS(BOUNDARY_CONDITIONS,FIELD,VARIABLE_TYPE,(/DOF_INDEX/),(/CONDITION/),(/VALUE/), &
+      & ERR,ERROR,*999)
+
+    EXITS("BOUNDARY_CONDITIONS_SET_LOCAL_DOF0")
+    RETURN
+999 ERRORSEXITS("BOUNDARY_CONDITIONS_SET_LOCAL_DOF0",ERR,ERROR)
+    RETURN 1
+  END SUBROUTINE BOUNDARY_CONDITIONS_SET_LOCAL_DOF0
+  
+  !
+  !================================================================================================================================
+  !
+ 
   !>Sets a boundary condition on the specified DOF.
   SUBROUTINE BOUNDARY_CONDITIONS_SET_LOCAL_DOF1(BOUNDARY_CONDITIONS,FIELD,VARIABLE_TYPE,DOF_INDEX,CONDITION,VALUE,ERR,ERROR,*)
 
@@ -1335,7 +1407,7 @@ CONTAINS
     INTEGER(INTG), INTENT(IN) :: VARIABLE_TYPE !<The variable type to set the boundary condition at
     INTEGER(INTG), INTENT(IN) :: DOF_INDEX !<The local dof index to set the boundary condition at
     INTEGER(INTG), INTENT(IN) :: CONDITION !<The boundary condition type to set \see BOUNDARY_CONDITIONS_ROUTINES_BoundaryConditions,BOUNDARY_CONDITIONS_ROUTINES
-    REAL(DP), INTENT(IN) :: VALUE !<The value of the boundary condition to set
+    REAL(DP), INTENT(IN) :: VALUE(:) !<The value of the boundary condition to set
     INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
@@ -1389,13 +1461,15 @@ CONTAINS
                   & ERR,ERROR,*999)
               IF(ASSOCIATED(BOUNDARY_CONDITIONS_VARIABLE)) THEN
                 IF(SIZE(DOF_INDICES,1)==SIZE(CONDITIONS,1)) THEN
-                  IF(SIZE(DOF_INDICES,1)==SIZE(VALUES,1)) THEN
+                  IF((SIZE(DOF_INDICES,1)==SIZE(VALUES,1)).OR.(CONDITIONS(1)==BOUNDARY_CONDITION_ROBIN)) THEN
                     DO i=1,SIZE(DOF_INDICES,1)
                       local_ny=DOF_INDICES(i)
                       IF(local_ny>=1.AND.local_ny<=DOMAIN_MAPPING%NUMBER_OF_LOCAL) THEN
                         global_ny=DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(local_ny)
                         ! Set boundary condition and dof type
                         CALL BoundaryConditions_SetConditionType(BOUNDARY_CONDITIONS_VARIABLE,global_ny,CONDITIONS(i), &
+                          & ERR,ERROR,*999)
+                        CALL BoundaryConditions_DofTypeSet(BOUNDARY_CONDITIONS,global_ny,CONDITIONS(i), &
                           & ERR,ERROR,*999)
                         ! Update field sets with boundary condition value
 
@@ -1405,6 +1479,7 @@ CONTAINS
                         CASE(BOUNDARY_CONDITION_FIXED)
                           CALL FIELD_PARAMETER_SET_UPDATE_LOCAL_DOF(FIELD,VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
                             & local_ny,VALUES(i),ERR,ERROR,*999)
+                          CALL BoundaryConditions_ValuesSet(BOUNDARY_CONDITIONS,1,local_ny,[VALUES],ERR,ERROR,*999)
                         CASE(BOUNDARY_CONDITION_FIXED_INLET)
                           CALL FIELD_PARAMETER_SET_UPDATE_LOCAL_DOF(FIELD,VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
                             & local_ny,VALUES(i),ERR,ERROR,*999)
@@ -1442,6 +1517,7 @@ CONTAINS
                         CASE(BOUNDARY_CONDITION_NEUMANN_POINT)
                           CALL FIELD_PARAMETER_SET_UPDATE_LOCAL_DOF(FIELD,VARIABLE_TYPE,FIELD_BOUNDARY_CONDITIONS_SET_TYPE, &
                             & local_ny,VALUES(i),ERR,ERROR,*999)
+                          CALL BoundaryConditions_ValuesSet(BOUNDARY_CONDITIONS,2,local_ny,[VALUES],ERR,ERROR,*999)
                         CASE(BOUNDARY_CONDITION_NEUMANN_POINT_INCREMENTED)
                           CALL FIELD_PARAMETER_SET_UPDATE_LOCAL_DOF(FIELD,VARIABLE_TYPE,FIELD_BOUNDARY_CONDITIONS_SET_TYPE, &
                             & local_ny,VALUES(i),ERR,ERROR,*999)
@@ -1455,6 +1531,8 @@ CONTAINS
                             & BOUNDARY_CONDITION_FIXED_CELLML,BOUNDARY_CONDITION_FIXED_STREE)
                           CALL FIELD_PARAMETER_SET_UPDATE_LOCAL_DOF(FIELD,VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
                             & local_ny,VALUES(i),ERR,ERROR,*999)
+                        CASE(BOUNDARY_CONDITION_ROBIN)
+                          CALL BoundaryConditions_ValuesSet(BOUNDARY_CONDITIONS,3,local_ny,[VALUES],ERR,ERROR,*999)
                         CASE DEFAULT
                           LOCAL_ERROR="The specified boundary condition type for dof index "// &
                             & TRIM(NUMBER_TO_VSTRING(i,"*",ERR,ERROR))//" of "// &
@@ -1592,6 +1670,8 @@ CONTAINS
     CASE(BOUNDARY_CONDITION_FIXED_FITTED,BOUNDARY_CONDITION_FIXED_NONREFLECTING,BOUNDARY_CONDITION_FIXED_CELLML, &
       & BOUNDARY_CONDITION_FIXED_STREE)
       dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_ROBIN)
+      dofType=BOUNDARY_CONDITION_DOF_MIXED
     CASE DEFAULT
       CALL FlagError("The specified boundary condition type for dof number "// &
         & TRIM(NUMBER_TO_VSTRING(globalDof,"*",err,error))//" of "// &
@@ -1641,6 +1721,87 @@ CONTAINS
 999 ERRORSEXITS("BoundaryConditions_SetConditionType",err,error)
     RETURN 1
   END SUBROUTINE BoundaryConditions_SetConditionType
+
+  !
+  !================================================================================================================================
+  !
+  !Elias
+  !> Checks the boundary condition type and sets the boundary condition type and dof type for the boundary conditions.
+  !> Makes sure any field parameter sets required are created, and sets the parameter set required array value.
+  SUBROUTINE BoundaryConditions_DofTypeSet(boundaryConditions,globalDof,condition,err,error,*)
+
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: boundaryConditions !<A pointer to the boundary conditions variable to set the boundary condition for
+    INTEGER(INTG), INTENT(IN) :: globalDof !<The globalDof to set the boundary condition at
+    INTEGER(INTG), INTENT(IN) :: condition !<The boundary condition type to set \see BOUNDARY_CONDITIONS_ROUTINES_BoundaryConditions,BOUNDARY_CONDITIONS_ROUTINES
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    !Local variables
+    INTEGER(INTG) :: dofType, previousCondition, previousDof
+
+    ENTERS("BoundaryConditions_DofTypeSet",err,error,*999)
+
+    ! We won't do much checking here as this is only used internally and everything has been checked for
+    ! association already
+    ! Don't need to make sure field values set type is available as this will always be there, but need
+    ! to make sure any other parameter sets required are.
+    SELECT CASE(condition)
+    CASE(BOUNDARY_CONDITION_FREE)
+      dofType=BOUNDARY_CONDITION_DOF_FREE
+    CASE(BOUNDARY_CONDITION_FIXED)
+      dofType=BOUNDARY_CONDITION_DOFTYPE_DIRICHLET
+    CASE(BOUNDARY_CONDITION_LINEAR_CONSTRAINT)
+      dofType=BOUNDARY_CONDITION_DOF_CONSTRAINED
+    CASE(BOUNDARY_CONDITION_FIXED_INLET)
+      dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_FIXED_OUTLET)
+      dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_FIXED_WALL)
+      dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_MOVED_WALL)
+      dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_FREE_WALL)
+      dofType=BOUNDARY_CONDITION_DOF_FREE
+    CASE(BOUNDARY_CONDITION_MOVED_WALL_INCREMENTED)
+      dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_FIXED_INCREMENTED) !For load increment loops
+      dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_PRESSURE)
+      ! Pressure boundary conditions leave the RHS dof as free, as the Neumann terms
+      ! are calculated in finite elasticity routines when calculating the element residual
+      dofType=BOUNDARY_CONDITION_DOF_FREE
+    CASE(BOUNDARY_CONDITION_PRESSURE_INCREMENTED)
+      dofType=BOUNDARY_CONDITION_DOF_FREE
+    CASE(BOUNDARY_CONDITION_CORRECTION_MASS_INCREASE)
+      dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_IMPERMEABLE_WALL)
+      dofType=BOUNDARY_CONDITION_DOF_FREE
+    CASE(BOUNDARY_CONDITION_NEUMANN_POINT,BOUNDARY_CONDITION_NEUMANN_POINT_INCREMENTED)
+      dofType=BOUNDARY_CONDITION_DOFTYPE_NEUMANN
+    CASE(BOUNDARY_CONDITION_NEUMANN_INTEGRATED,BOUNDARY_CONDITION_NEUMANN_INTEGRATED_ONLY)
+      dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_FIXED_FITTED,BOUNDARY_CONDITION_FIXED_NONREFLECTING,BOUNDARY_CONDITION_FIXED_CELLML, &
+      & BOUNDARY_CONDITION_FIXED_STREE)
+      dofType=BOUNDARY_CONDITION_DOF_FIXED
+    CASE(BOUNDARY_CONDITION_ROBIN)
+      dofType=BOUNDARY_CONDITION_DOFTYPE_ROBIN
+    CASE DEFAULT
+      CALL FlagError("The specified boundary condition type for dof number "// &
+        & TRIM(NUMBER_TO_VSTRING(globalDof,"*",err,error))//" of "// &
+        & TRIM(NUMBER_TO_VSTRING(condition,"*",err,error))//" is invalid.", &
+        & err,error,*999)
+    END SELECT
+
+
+
+    !Set the boundary condition type and DOF type
+    boundaryConditions%rowBoundaryConditionsDofType(globalDof)=dofType
+
+    EXITS("BoundaryConditions_DofTypeSet")
+    RETURN
+999 ERRORSEXITS("BoundaryConditions_DofTypeSet",err,error)
+    RETURN 1
+  END SUBROUTINE BoundaryConditions_DofTypeSet
 
   !
   !================================================================================================================================
@@ -1772,6 +1933,8 @@ CONTAINS
       IF(interpolationType/=FIELD_NODE_BASED_INTERPOLATION) THEN
         validCondition=.FALSE.
       END IF
+    CASE(BOUNDARY_CONDITION_ROBIN)
+      !do nothing
     CASE DEFAULT
       CALL FlagError("The specified boundary condition type of "// &
         & TRIM(NUMBER_TO_VSTRING(condition,"*",err,error))//" is invalid.", &
@@ -1913,6 +2076,8 @@ CONTAINS
                 & equationsSet%specification(2)==EQUATIONS_SET_NAVIER_STOKES_EQUATION_TYPE)) THEN
               validEquationsSetFound=.TRUE.
             END IF
+          CASE(BOUNDARY_CONDITION_ROBIN)
+            validEquationsSetFound=.TRUE.
           CASE DEFAULT
             CALL FlagError("The specified boundary condition type of "// &
               & TRIM(NUMBER_TO_VSTRING(boundaryConditionType,"*",err,error))// &
@@ -2927,7 +3092,7 @@ CONTAINS
   !
 
   !>Sets a boundary condition on the specified user node. \see OPENCMISS_CMISSBoundaryConditionsSetNode
-  SUBROUTINE BOUNDARY_CONDITIONS_SET_NODE(BOUNDARY_CONDITIONS,FIELD,VARIABLE_TYPE,VERSION_NUMBER,DERIVATIVE_NUMBER, &
+  SUBROUTINE BOUNDARY_CONDITIONS_SET_NODE0(BOUNDARY_CONDITIONS,FIELD,VARIABLE_TYPE,VERSION_NUMBER,DERIVATIVE_NUMBER, &
     & USER_NODE_NUMBER,COMPONENT_NUMBER,CONDITION,VALUE,ERR,ERROR,*)
 
     !Argument variables
@@ -2948,7 +3113,7 @@ CONTAINS
     TYPE(FIELD_VARIABLE_TYPE), POINTER :: FIELD_VARIABLE
     TYPE(VARYING_STRING) :: LOCAL_ERROR
 
-    ENTERS("BOUNDARY_CONDITIONS_SET_NODE",ERR,ERROR,*999)
+    ENTERS("BOUNDARY_CONDITIONS_SET_NODE0",ERR,ERROR,*999)
 
     NULLIFY(BOUNDARY_CONDITIONS_VARIABLE)
     NULLIFY(FIELD_VARIABLE)
@@ -2983,12 +3148,80 @@ CONTAINS
     ELSE
       CALL FlagError("Boundary conditions is not associated.",ERR,ERROR,*999)
     ENDIF
-
-    EXITS("BOUNDARY_CONDITIONS_SET_NODE")
+       
+    EXITS("BOUNDARY_CONDITIONS_SET_NODE0")
     RETURN
-999 ERRORSEXITS("BOUNDARY_CONDITIONS_SET_NODE",ERR,ERROR)
+999 ERRORSEXITS("BOUNDARY_CONDITIONS_SET_NODE0",ERR,ERROR)
     RETURN 1
-  END SUBROUTINE BOUNDARY_CONDITIONS_SET_NODE
+  END SUBROUTINE BOUNDARY_CONDITIONS_SET_NODE0
+  
+  !
+  !================================================================================================================================
+  !
+!Elias
+  !>Sets a boundary condition on the specified user node. \see OPENCMISS_CMISSBoundaryConditionsSetNode
+  SUBROUTINE BOUNDARY_CONDITIONS_SET_NODE1(BOUNDARY_CONDITIONS,FIELD,VARIABLE_TYPE,VERSION_NUMBER,DERIVATIVE_NUMBER, &
+    & USER_NODE_NUMBER,COMPONENT_NUMBER,CONDITION,VALUE,ERR,ERROR,*)
+
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: BOUNDARY_CONDITIONS !<A pointer to the boundary conditions to set the boundary condition for
+    TYPE(FIELD_TYPE), POINTER :: FIELD !<The dependent field to set the boundary condition on.
+    INTEGER(INTG), INTENT(IN) :: VARIABLE_TYPE !<The variable type to set the boundary condition at
+    INTEGER(INTG), INTENT(IN) :: VERSION_NUMBER !<The derivative version to set the boundary condition at
+    INTEGER(INTG), INTENT(IN) :: DERIVATIVE_NUMBER !<The derivative to set the boundary condition at
+    INTEGER(INTG), INTENT(IN) :: USER_NODE_NUMBER !<The user node number to set the boundary condition at
+    INTEGER(INTG), INTENT(IN) :: COMPONENT_NUMBER !<The component number to set the boundary condition at
+    INTEGER(INTG), INTENT(IN) :: CONDITION !<The boundary condition type to set \see BOUNDARY_CONDITIONS_ROUTINES_BoundaryConditions,BOUNDARY_CONDITIONS_ROUTINES
+    REAL(DP), INTENT(IN) :: VALUE(:) !<The value of the boundary condition to set
+    INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
+    !Local Variables
+    INTEGER(INTG) :: local_ny,global_ny
+    TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: BOUNDARY_CONDITIONS_VARIABLE
+    TYPE(FIELD_VARIABLE_TYPE), POINTER :: FIELD_VARIABLE
+    TYPE(VARYING_STRING) :: LOCAL_ERROR
+
+    ENTERS("BOUNDARY_CONDITIONS_SET_NODE1",ERR,ERROR,*999)
+
+    NULLIFY(BOUNDARY_CONDITIONS_VARIABLE)
+    NULLIFY(FIELD_VARIABLE)
+
+    IF(ASSOCIATED(BOUNDARY_CONDITIONS)) THEN
+      IF(BOUNDARY_CONDITIONS%BOUNDARY_CONDITIONS_FINISHED) THEN
+        CALL FlagError("Boundary conditions have been finished.",ERR,ERROR,*999)
+      ELSE
+        IF(ASSOCIATED(FIELD)) THEN
+          CALL FIELD_COMPONENT_DOF_GET_USER_NODE(FIELD,VARIABLE_TYPE,VERSION_NUMBER,DERIVATIVE_NUMBER, &
+            & USER_NODE_NUMBER,COMPONENT_NUMBER,local_ny,global_ny,ERR,ERROR,*999)
+          CALL Field_VariableGet(FIELD,VARIABLE_TYPE,FIELD_VARIABLE,ERR,ERROR,*999)
+          IF(ASSOCIATED(FIELD_VARIABLE)) THEN
+            CALL BOUNDARY_CONDITIONS_VARIABLE_GET(BOUNDARY_CONDITIONS,FIELD_VARIABLE,BOUNDARY_CONDITIONS_VARIABLE, &
+              & ERR,ERROR,*999)
+            IF(ASSOCIATED(BOUNDARY_CONDITIONS_VARIABLE)) THEN
+              CALL BoundaryConditions_CheckInterpolationType(CONDITION,FIELD,VARIABLE_TYPE,COMPONENT_NUMBER,ERR,ERROR,*999)
+              CALL BOUNDARY_CONDITIONS_SET_LOCAL_DOF(BOUNDARY_CONDITIONS,FIELD,VARIABLE_TYPE, &
+                & local_ny,CONDITION,[VALUE],ERR,ERROR,*999)
+            ELSE
+              LOCAL_ERROR="The boundary conditions for variable type "//TRIM(NUMBER_TO_VSTRING(VARIABLE_TYPE,"*",ERR,ERROR))// &
+                & " has not been created."
+              CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+            ENDIF
+          ELSE
+            CALL FlagError("The dependent field variable is not associated",ERR,ERROR,*999)
+          ENDIF
+        ELSE
+          CALL FlagError("The dependent field is not associated",ERR,ERROR,*999)
+        ENDIF
+      ENDIF
+    ELSE
+      CALL FlagError("Boundary conditions is not associated.",ERR,ERROR,*999)
+    ENDIF
+       
+    EXITS("BOUNDARY_CONDITIONS_SET_NODE1")
+    RETURN
+999 ERRORSEXITS("BOUNDARY_CONDITIONS_SET_NODE1",ERR,ERROR)
+    RETURN 1
+  END SUBROUTINE BOUNDARY_CONDITIONS_SET_NODE1
 
   !
   !================================================================================================================================
@@ -3872,5 +4105,1047 @@ CONTAINS
   !
   !================================================================================================================================
   !
+
+  !> Elias Initialise the boundary conditions values.
+  SUBROUTINE BoundaryConditions_ValuesInitialise(boundaryConditions,ERR,ERROR,*)
+
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: boundaryConditions !<A pointer to the boundary conditions to initialise a boundary conditions values for.
+
+    INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
+    !Local Variables
+!    TYPE(BoundaryConditionsValuesType), POINTER :: boundaryConditionsValues(:)
+    TYPE(RobinValuesType), POINTER :: robinValues
+    TYPE(BoundaryConditionsDofType), POINTER :: dofType
+    integer(INTG) :: NumberOfNodes,nodeIdx
+
+    ENTERS("BoundaryConditions_ValuesInitialise",ERR,ERROR,*998)
+
+
+
+    NumberOfNodes = boundaryConditions%solver_equations%solver_mapping%equations_sets(1)%ptr &
+      & %equations%vectorEquations%vectorMapping%numberOfRows
+
+    IF(ASSOCIATED(boundaryConditions)) THEN
+!      NULLIFY(boundaryConditionsValues)
+!      boundaryConditionsValues=>boundaryConditions%boundaryConditionsValues
+!      IF(.NOT.ASSOCIATED(boundaryConditionsValues))
+        ALLOCATE(boundaryConditions%boundaryConditionsValues(NumberOfNodes),STAT=ERR)
+        IF(ERR/=0) CALL FlagError("Could not allocate boundaryConditionsValues." ,ERR,ERROR,*998)
+!        boundaryConditionsValues=>boundaryConditions%boundaryConditionsValues
+        boundaryConditions%boundaryConditionsValues%boundary = 0
+        boundaryConditions%boundaryConditionsValues%boundaryNode = .FALSE.
+        boundaryConditions%boundaryConditionsValues%dirichletValue = 0.0
+        boundaryConditions%boundaryConditionsValues%neumannValue = 0.0
+
+!        ALLOCATE(boundaryConditions%dofTypes%rowBCtypes(NumberOfNodes),STAT=ERR)
+!        IF(ERR/=0) CALL FlagError("Could not allocate rowBCtypes." ,ERR,ERROR,*998)
+!        boundaryConditions%dofTypes%numberOfValues=0
+
+
+        NULLIFY(robinValues)       
+        DO nodeIdx =1,NumberOfNodes
+          ALLOCATE(boundaryConditions%boundaryConditionsValues(nodeIdx)%robinValues,STAT=ERR)
+          IF(ERR/=0) CALL FlagError("Could not allocate robinValues.",ERR,ERROR,*998) 
+          robinValues=>boundaryConditions%boundaryConditionsValues(nodeIdx)%robinValues
+          ALLOCATE(boundaryConditions%boundaryConditionsValues(nodeIdx)%dofType,STAT=ERR)
+          IF(ERR/=0) CALL FlagError("Could not allocate dofType.",ERR,ERROR,*998) 
+          dofType=>boundaryConditions%boundaryConditionsValues(nodeIdx)%dofType
+!          ALLOCATE(robinValues,STAT=ERR)
+          robinValues%U_Coefficient = 0.0
+          robinValues%DelUDeln_Coefficient=0.0
+          robinValues%robinValue=0.0
+          dofType%rowBCtype=0
+!          boundaryConditions%dofTypes%rowBCtypes(NodeIdx)=0
+        END DO
+
+    ELSE
+      CALL FlagError("boundaryConditions is not associated.",ERR,ERROR,*998)
+    ENDIF
+
+!\TODO: Finalise for this routine. Also number of nedes should be inserted from somewhere else.
+    EXITS("BoundaryConditions_ValuesInitialise")
+    RETURN
+998 ERRORSEXITS("BoundaryConditions_ValuesInitialise",ERR,ERROR)
+    RETURN 1
+  END SUBROUTINE BoundaryConditions_ValuesInitialise
+
+  !
+  !================================================================================================================================
+  !
+  !> Elias Set the boundary conditions values.
+  SUBROUTINE BoundaryConditions_ValuesSet(boundaryConditions,boundaryGeneralType,NodeIdx,VALUE,ERR,ERROR,*)
+
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: boundaryConditions !<A pointer to the boundary conditions to set boundary conditions values for.
+    
+    INTEGER(INTG), INTENT(IN) :: boundaryGeneralType !<Could be no boundary, Dirichlet,Neumann, or Robin type.
+    INTEGER(INTG), INTENT(IN) :: NodeIdx
+    REAL(DP), INTENT(IN) :: VALUE(:) !<VALUE. The value of the boundary condition for the i'th dof to set
+    INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
+    !Local Variables
+    TYPE(BoundaryConditionsValuesType), POINTER :: boundaryConditionsValues
+    TYPE(RobinValuesType), POINTER :: robinValues
+    TYPE(BoundaryConditionsDofType), POINTER :: dofType
+    INTEGER(INTG) :: numberOfValues
+
+
+    ENTERS("BoundaryConditions_ValuesSet",ERR,ERROR,*998)
+
+    IF(ASSOCIATED(boundaryConditions)) THEN
+      NULLIFY(boundaryConditionsValues)
+      NULLIFY(robinValues)       
+      NULLIFY(dofType) 
+
+      boundaryConditionsValues=>boundaryConditions%boundaryConditionsValues(nodeIdx)
+      boundaryConditionsValues%boundary = boundaryGeneralType
+      boundaryConditionsValues%boundaryNode = .TRUE. 
+
+      dofType=>boundaryConditions%boundaryConditionsValues(nodeIdx)%dofType
+      ALLOCATE(dofTYPE%values(size(VALUE,1)))
+      dofType%rowBCtype = boundaryGeneralType
+      dofType%values = VALUE     
+
+
+      SELECT CASE(boundaryGeneralType)
+      CASE(NO_BOUNDARY)
+        !DO NOTHING
+      CASE(DIRICHLET_BOUNDARY_CONDITION)
+        boundaryConditions%boundaryConditionsValues(nodeIdx)%dirichletValue = value(1)
+      CASE(NEUMANN_BOUNDARY_CONDITION)
+        boundaryConditions%boundaryConditionsValues(nodeIdx)%neumannValue = value(1)
+      CASE(ROBIN_BOUNDARY_CONDITION)
+        IF (SIZE(VALUE,1)==3) THEN
+          robinValues=>boundaryConditions%boundaryConditionsValues(nodeIdx)%robinValues
+          robinValues%U_Coefficient = VALUE(1)
+          robinValues%DelUDeln_Coefficient=VALUE(2)
+          robinValues%robinValue=VALUE(3)
+        ELSE
+          CALL FlagError("Robin BCs need 3 values to be assigned." ,ERR,ERROR,*998)
+        END IF
+      END SELECT
+    ELSE
+      CALL FlagError("boundaryConditions is not associated.",ERR,ERROR,*998)
+    ENDIF
+
+
+
+!ALLOCATE(boundaryConditions%dofTypes%DOFs(numberOfvalues),STAT=ERR)
+
+
+
+!  TYPE BoundaryConditions_Dof2valueParam_map
+!    INTEGER(INTG) :: numberOfvalues
+!    INTEGER(INTG), ALLOCATABLE :: valuesNumber(:)
+!  END TYPE BoundaryConditions_Dof2valueParam_map
+
+!  TYPE BoundaryConditionsDofTypes
+!    INTEGER(INTG), ALLOCATABLE :: rowBCtypes(:)
+!    INTEGER(INTG) :: numberOfValues
+!    REAL(DP), ALLOCATABLE :: values(:)
+!    TYPE(BoundaryConditions_Dof2valueParam_map), ALLOCATABLE :: DOFs(:)
+!  END TYPE BoundaryConditionsDofTypes
+
+
+
+    EXITS("BoundaryConditions_ValuesSet")
+    RETURN
+998 ERRORSEXITS("BoundaryConditions_ValuesSet",ERR,ERROR)
+    RETURN 1
+  END SUBROUTINE BoundaryConditions_ValuesSet
+
+  !
+  !================================================================================================================================
+  !
+!Elias
+  !>Sets/changes the sparsity type for the Robin integration matrices
+  SUBROUTINE BoundaryConditions_RobinSparsityTypeSet(boundaryConditions,sparsityType,err,error,*)
+
+    !Argument variables
+    INTEGER(INTG), INTENT(IN) :: sparsityType !<The matrix sparsity type to be set \see SOLVER_ROUTINES_SparsityTypes,SOLVER_ROUTINES
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    !Local Variables
+    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: boundaryConditions
+
+    ENTERS("BoundaryConditions_RobinSparsityTypeSet",ERR,ERROR,*999)
+
+    IF(ASSOCIATED(boundaryConditions)) THEN
+      SELECT CASE(sparsityType)
+      CASE(BOUNDARY_CONDITION_SPARSE_MATRICES)
+        boundaryConditions%robinBoundaryConditions%robinMatrixSparsity=BOUNDARY_CONDITION_SPARSE_MATRICES
+      CASE(BOUNDARY_CONDITION_FULL_MATRICES)
+        boundaryConditions%robinBoundaryConditions%robinMatrixSparsity=BOUNDARY_CONDITION_FULL_MATRICES
+      CASE DEFAULT
+        CALL FlagError("The specified Robin integration matrix sparsity type of "// &
+          & TRIM(NUMBER_TO_VSTRING(sparsityType,"*",err,error))//" is invalid.",err,error,*999)
+      END SELECT
+    ELSE
+      CALL FlagError("Boundary conditions are not associated.",err,error,*999)
+    END IF
+
+    EXITS("BoundaryConditions_RobinSparsityTypeSet")
+    RETURN
+999 ERRORSEXITS("BoundaryConditions_RobinSparsityTypeSet",err,error)
+    RETURN 1
+
+  END SUBROUTINE BoundaryConditions_RobinSparsityTypeSet
+
+  !
+  !================================================================================================================================
+  !
+
+  !Elias
+  !>Initialise the Robin boundary conditions information
+  SUBROUTINE BoundaryConditions_RobinInitialise(boundaryConditionsVariable,err,error,*)
+
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: boundaryConditionsVariable !<A pointer to the boundary conditions variable to initialise Robin conditions for
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    !Local Variables
+    TYPE(Boundary_Conditions_Type), POINTER :: boundaryConditions !<The boundary conditions for the left hand side field variable
+    TYPE(BoundaryConditionsRobinType), POINTER :: boundaryConditionsRobin
+    INTEGER(INTG) :: numberOfValues,numberOfLocalDofs
+    INTEGER(INTG) :: dummyErr
+    TYPE(VARYING_STRING) :: dummyError
+
+    ENTERS("BoundaryConditions_RobinInitialise",err,error,*998)
+
+    boundaryConditions=>boundaryConditionsVariable%BOUNDARY_CONDITIONS
+    IF(ASSOCIATED(boundaryConditions)) THEN
+      IF(ASSOCIATED(boundaryConditionsVariable)) THEN
+        numberOfValues=boundaryConditionsVariable%DOF_COUNTS(BOUNDARY_CONDITION_ROBIN)
+        ALLOCATE(boundaryConditions%robinBoundaryConditions,stat=err)
+        IF(err/=0) CALL FlagError("Could not allocate Robin Boundary Conditions",err,error,*998)
+        boundaryConditionsRobin=>boundaryConditions%robinBoundaryConditions
+        boundaryConditionsRobin%robinMatrixSparsity=BOUNDARY_CONDITION_SPARSE_MATRICES
+        IF(ASSOCIATED(boundaryConditionsRobin)) THEN
+          NULLIFY(boundaryConditionsRobin%robinMatrix)
+!          NULLIFY(boundaryConditionsRobin%pointValues)
+          NULLIFY(boundaryConditionsRobin%integrationVector)
+          NULLIFY(boundaryConditionsRobin%pointDofMapping)
+
+          numberOfLocalDofs=boundaryConditionsVariable%VARIABLE%NUMBER_OF_DOFS
+          ALLOCATE(boundaryConditionsRobin%setDofs(numberOfValues),stat=err)
+          IF(err/=0) CALL FlagError("Could not allocate Robin set DOFs.",err,error,*999)
+          boundaryConditionsRobin%setDofs=0
+          ALLOCATE(boundaryConditionsRobin%robinMatrix,stat=err)
+          IF(err/=0) CALL FlagError("Could not allocate Robin matrix.",err,error,*999)
+        ELSE
+          CALL FlagError("The boundary condition Robin is not associated",err,error,*998)
+        END IF
+      ELSE
+        CALL FlagError("Boundary conditions variable is not associated.",err,error,*998)
+      END IF
+    ELSE
+      CALL FlagError("Boundary conditions is not associated.",err,error,*998)
+    END IF
+
+    EXITS("BoundaryConditions_RobinInitialise")
+    RETURN
+999 CALL BoundaryConditions_RobinFinalise(boundaryConditionsVariable,dummyErr,dummyError,*998)
+998 ERRORSEXITS("BoundaryConditions_RobinInitialise",err,error)
+    RETURN 1
+  END SUBROUTINE BoundaryConditions_RobinInitialise
+
+  !
+  !================================================================================================================================
+  !
+  !Elias
+  !Finalise the Robin condition information for a boundary conditions variable
+  SUBROUTINE BoundaryConditions_RobinFinalise(boundaryConditionsVariable,err,error,*)
+
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: boundaryConditionsVariable !<A pointer to the boundary conditions variable to finalise the Robin conditions for
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    !Local Variables
+    TYPE(Boundary_Conditions_Type), POINTER :: boundaryConditions !<The boundary conditions for the left hand side field variable
+    TYPE(BoundaryConditionsRobinType), POINTER :: boundaryConditionsRobin
+
+    ENTERS("BoundaryConditions_RobinFinalise",err,error,*999)
+
+    boundaryConditions=>boundaryConditionsVariable%BOUNDARY_CONDITIONS
+    IF(ASSOCIATED(boundaryConditions)) THEN
+      IF(ASSOCIATED(boundaryConditionsVariable)) THEN
+        boundaryConditionsRobin=>boundaryConditions%robinBoundaryConditions
+        IF(ASSOCIATED(boundaryConditionsRobin)) THEN
+          IF(ALLOCATED(boundaryConditionsRobin%setDofs)) &
+            & DEALLOCATE(boundaryConditionsRobin%setDofs)
+          CALL BoundaryConditions_RobinMatricesFinalise(boundaryConditionsVariable,err,error,*999)
+          DEALLOCATE(boundaryConditionsRobin)
+          NULLIFY(boundaryConditions%robinBoundaryConditions)
+        END IF
+      ELSE
+        CALL FlagError("Boundary conditions variable is not associated.",err,error,*999)
+      END IF
+    ELSE
+      CALL FlagError("Boundary conditions is not associated.",err,error,*999)
+    END IF
+
+    EXITS("BoundaryConditions_RobinFinalise")
+    RETURN
+999 ERRORSEXITS("BoundaryConditions_RobinFinalise",err,error)
+    RETURN 1
+  END SUBROUTINE BoundaryConditions_RobinFinalise
+
+  !
+  !================================================================================================================================
+  !
+
+  !Finalise the Robin condition matrices for a boundary conditions variable
+  SUBROUTINE BoundaryConditions_RobinMatricesFinalise(boundaryConditionsVariable,err,error,*)
+
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: boundaryConditionsVariable !<A pointer to the boundary conditions variable to finalise Robin condition matrices for
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    !Local Variables
+    TYPE(Boundary_Conditions_Type), POINTER :: boundaryConditions !<The boundary conditions for the left hand side field variable
+    TYPE(BoundaryConditionsRobinType), POINTER :: boundaryConditionsRobin
+
+    ENTERS("BoundaryConditions_RobinMatricesFinalise",err,error,*999)
+
+    boundaryConditions=>boundaryConditionsVariable%BOUNDARY_CONDITIONS
+    IF(ASSOCIATED(boundaryConditions)) THEN
+      IF(ASSOCIATED(boundaryConditionsVariable)) THEN
+        boundaryConditionsRobin=>boundaryConditions%robinBoundaryConditions
+        IF(ASSOCIATED(boundaryConditionsRobin)) THEN
+          IF(ASSOCIATED(boundaryConditionsRobin%robinMatrix%matrix)) &
+            & CALL DISTRIBUTED_MATRIX_DESTROY(boundaryConditionsRobin%robinMatrix%matrix,err,error,*999)
+          IF(ASSOCIATED(boundaryConditionsRobin%integrationVector)) &
+            & CALL DISTRIBUTED_VECTOR_DESTROY(boundaryConditionsRobin%integrationVector,err,error,*999)
+          CALL DOMAIN_MAPPINGS_MAPPING_FINALISE(boundaryConditionsRobin%pointDofMapping,err,error,*999)
+        END IF
+      ELSE
+        CALL FlagError("Boundary conditions variable is not associated.",err,error,*999)
+      END IF
+    ELSE
+      CALL FlagError("Boundary conditions is not associated.",err,error,*999)
+    END IF
+
+    EXITS("BoundaryConditions_RobinMatricesFinalise")
+    RETURN
+999 ERRORSEXITS("BoundaryConditions_RobinMatricesFinalise",err,error)
+    RETURN 1
+  END SUBROUTINE BoundaryConditions_RobinMatricesFinalise
+
+  !
+  !================================================================================================================================
+  !
+
+!Elias
+  !>Initialise the Robin boundary conditions matrices and vectors.
+  !>This must be done after we know which DOFs have Robin point conditions so
+  !>that we can work out the matrix sparsity pattern.
+  SUBROUTINE BoundaryConditions_RobinMatricesInitialise(boundaryConditionsVariable,err,error,*)
+
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: boundaryConditionsVariable !<A pointer to the boundary conditions variable to initialise Robin condition matrices for
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    !Local Variables
+    TYPE(Boundary_Conditions_Type), POINTER :: boundaryConditions !<The boundary conditions for the left hand side field variable
+    TYPE(BoundaryConditionsRobinType), POINTER :: boundaryConditionsRobin
+    TYPE(FIELD_VARIABLE_TYPE), POINTER :: rhsVariable
+    TYPE(DOMAIN_MAPPING_TYPE), POINTER :: rowMapping, pointDofMapping
+    TYPE(DOMAIN_TOPOLOGY_TYPE), POINTER :: topology
+    TYPE(DOMAIN_LINE_TYPE), POINTER :: line
+    TYPE(DOMAIN_FACE_TYPE), POINTER :: face
+    TYPE(LIST_TYPE), POINTER :: columnIndicesList, rowColumnIndicesList
+    INTEGER(INTG) :: myComputationalNodeNumber
+    INTEGER(INTG) :: numberOfPointDofs, numberNonZeros, numberRowEntries, RobinConditionNumber, localRobinConditionIdx
+    INTEGER(INTG) :: robinIdx, globalDof, localDof, localDofNyy, domainIdx, numberOfDomains, domainNumber, componentNumber
+    INTEGER(INTG) :: nodeIdx, derivIdx, nodeNumber, versionNumber, derivativeNumber, columnNodeNumber, lineIdx, faceIdx, columnDof
+    INTEGER(INTG), ALLOCATABLE :: rowIndices(:), columnIndices(:), localDofNumbers(:)
+    REAL(DP) :: pointValue
+    INTEGER(INTG) :: dummyErr
+    TYPE(VARYING_STRING) :: dummyError
+
+    ENTERS("BoundaryConditions_RobinMatricesInitialise",err,error,*999)
+
+    boundaryConditions=>boundaryConditionsVariable%BOUNDARY_CONDITIONS
+    IF(ASSOCIATED(boundaryConditions)) THEN
+      IF(ASSOCIATED(boundaryConditionsVariable)) THEN
+        rhsVariable=>boundaryConditionsVariable%variable
+        IF(.NOT.ASSOCIATED(rhsVariable)) &
+          & CALL FlagError("RHS boundary conditions variable field variable is not associated.",err,error,*999)
+        numberOfPointDofs=boundaryConditionsVariable%DOF_COUNTS(BOUNDARY_CONDITION_Robin)
+        boundaryConditionsRobin=>boundaryConditions%robinBoundaryConditions
+        IF(ASSOCIATED(boundaryConditionsRobin)) THEN
+          ! For rows we can re-use the RHS variable row mapping
+          rowMapping=>rhsVariable%DOMAIN_MAPPING
+          IF(.NOT.ASSOCIATED(rowMapping)) &
+            & CALL FlagError("RHS field variable mapping is not associated.",err,error,*998)
+
+          ! Create a domain mapping for the Robin DOFs, required for the distributed matrix columns
+          ALLOCATE(pointDofMapping,stat=err)
+          IF(err/=0) CALL FlagError("Could not allocate Robin DOF domain mapping.",err,error,*999)
+          CALL DOMAIN_MAPPINGS_MAPPING_INITIALISE(pointDofMapping,rowMapping%NUMBER_OF_DOMAINS,err,error,*999)
+          boundaryConditionsRobin%pointDofMapping=>pointDofMapping
+          ! Calculate global to local mapping for Robin DOFs
+          pointDofMapping%NUMBER_OF_GLOBAL=numberOfPointDofs
+          ALLOCATE(pointDofMapping%GLOBAL_TO_LOCAL_MAP(numberOfPointDofs),stat=err)
+          IF(err/=0) CALL FlagError("Could not allocate Robin point DOF global to local mapping.",err,error,*999)
+          ALLOCATE(localDofNumbers(0:rowMapping%NUMBER_OF_DOMAINS-1),stat=err)
+          IF(ERR/=0) CALL FlagError("Could not allocate local Robin DOF numbers.",err,error,*999)
+          localDofNumbers=0
+
+          IF(DIAGNOSTICS2) THEN
+            CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"Local numbering",err,error,*999)
+          END IF
+          DO robinIdx=1,numberOfPointDofs
+            globalDof=boundaryConditionsRobin%setDofs(RobinIdx)
+            ! Get domain information from the RHS variable domain mapping, but set new local numbers.
+            numberOfDomains=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(globalDof)%NUMBER_OF_DOMAINS
+            pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%NUMBER_OF_DOMAINS=numberOfDomains
+            ALLOCATE(pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_NUMBER(numberOfDomains),stat=err)
+            IF(err/=0) CALL FlagError("Could not allocate Robin DOF global to local map local number.",err,error,*999)
+            ALLOCATE(pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%DOMAIN_NUMBER(numberOfDomains),stat=err)
+            IF(err/=0) CALL FlagError("Could not allocate Robin DOF global to local map domain number.",err,error,*999)
+            ALLOCATE(pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_TYPE(numberOfDomains),stat=err)
+            IF(err/=0) CALL FlagError("Could not allocate Robin DOF global to local map local type.",err,error,*999)
+            IF(DIAGNOSTICS2) THEN
+              CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"  Robin point DOF index = ",RobinIdx,err,error,*999)
+            END IF
+            DO domainIdx=1,numberOfDomains
+              domainNumber=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(globalDof)%DOMAIN_NUMBER(domainIdx)
+              pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%DOMAIN_NUMBER(domainIdx)=domainNumber
+              pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_TYPE(domainIdx)= &
+                & rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(globalDof)%LOCAL_TYPE(domainIdx)
+              IF(pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_INTERNAL.OR. &
+                  & pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_BOUNDARY) THEN
+                localDofNumbers(domainNumber)=localDofNumbers(domainNumber)+1
+                pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_NUMBER(domainIdx)=localDofNumbers(domainNumber)
+                IF(DIAGNOSTICS2) THEN
+                  CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"    Global rhs var DOF = ",globalDof,err,error,*999)
+                  CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"    Domain number = ",domainNumber,err,error,*999)
+                  CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"    Local type = ", &
+                    & pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_TYPE(domainIdx),err,error,*999)
+                  CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"    Local number = ",localDofNumbers(domainNumber),err,error,*999)
+                END IF
+              ENDIF
+            END DO
+          END DO
+          !Local DOFs must be numbered before ghost DOFs, so loop though again, this time numbering GHOST DOFs
+          IF(DIAGNOSTICS2) THEN
+            CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"Ghost numbering",err,error,*999)
+          END IF
+          DO RobinIdx=1,numberOfPointDofs
+            globalDof=boundaryConditionsRobin%setDofs(RobinIdx)
+            numberOfDomains=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(globalDof)%NUMBER_OF_DOMAINS
+            IF(DIAGNOSTICS2) THEN
+              CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"  Robin point DOF index = ",RobinIdx,err,error,*999)
+            END IF
+            DO domainIdx=1,numberOfDomains
+              IF(pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_GHOST) THEN
+                domainNumber=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(globalDof)%DOMAIN_NUMBER(domainIdx)
+                localDofNumbers(domainNumber)=localDofNumbers(domainNumber)+1
+                pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_NUMBER(domainIdx)=localDofNumbers(domainNumber)
+                IF(DIAGNOSTICS2) THEN
+                  CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"    Global rhs var DOF = ",globalDof,err,error,*999)
+                  CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"    Domain number = ",domainNumber,err,error,*999)
+                  CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"    Local number = ",localDofNumbers(domainNumber),err,error,*999)
+                END IF
+              ENDIF
+            END DO
+          END DO
+
+          CALL DOMAIN_MAPPINGS_LOCAL_FROM_GLOBAL_CALCULATE(pointDofMapping,err,error,*999)
+
+          IF(ASSOCIATED(boundaryConditionsRobin%robinMatrix%matrix)) NULLIFY(boundaryConditionsRobin%robinMatrix%matrix)
+          CALL DISTRIBUTED_MATRIX_CREATE_START(rowMapping,pointDofMapping,boundaryConditionsRobin%robinMatrix%matrix,err,error,*999)
+          SELECT CASE(boundaryConditionsVariable%BOUNDARY_CONDITIONS%robinBoundaryConditions%robinMatrixSparsity)
+          CASE(BOUNDARY_CONDITION_SPARSE_MATRICES)
+            ! Work out integration matrix sparsity structure
+            ! For a single process, compressed column would be more memory efficient, but with
+            ! multiple processes the number of Robin point DOFs could be more than the number
+            ! of local row DOFs, and multiplying a compressed row matrix by a vector is faster,
+            ! so we will use compressed row storage
+            ALLOCATE(rowIndices(rowMapping%TOTAL_NUMBER_OF_LOCAL+1),stat=err)
+            IF(err/=0) CALL FlagError("Could not allocate Robin integration matrix column indices.",err,error,*999)
+            ! We don't know the number of non zeros before hand, so use a list to keep track of column indices
+            NULLIFY(columnIndicesList)
+            CALL LIST_CREATE_START(columnIndicesList,err,error,*999)
+            CALL LIST_DATA_TYPE_SET(columnIndicesList,LIST_INTG_TYPE,err,error,*999)
+            CALL LIST_CREATE_FINISH(columnIndicesList,err,error,*999)
+            ! Stores the column indices for the current row
+            NULLIFY(rowColumnIndicesList)
+            CALL LIST_CREATE_START(rowColumnIndicesList,err,error,*999)
+            CALL LIST_DATA_TYPE_SET(rowColumnIndicesList,LIST_INTG_TYPE,err,error,*999)
+            CALL LIST_MUTABLE_SET(rowColumnIndicesList,.TRUE.,err,error,*999)
+            CALL LIST_CREATE_FINISH(rowColumnIndicesList,err,error,*999)
+            rowIndices(1)=1
+
+            DO localDof=1,rhsVariable%DOMAIN_MAPPING%TOTAL_NUMBER_OF_LOCAL
+              localDofNyy=rhsVariable%DOF_TO_PARAM_MAP%DOF_TYPE(2,localDof)
+              componentNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(4,localDofNyy)
+              ! Get topology for finding faces/lines
+              topology=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%TOPOLOGY
+              IF(.NOT.ASSOCIATED(topology)) THEN
+                CALL FlagError("Field component topology is not associated.",err,error,*999)
+              END IF
+
+              SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%INTERPOLATION_TYPE)
+              CASE(FIELD_NODE_BASED_INTERPOLATION)
+                nodeNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(3,localDofNyy)
+                IF(.NOT.ASSOCIATED(topology%NODES%NODES)) THEN
+                  CALL FlagError("Topology nodes are not associated.",err,error,*999)
+                END IF
+                IF(topology%NODES%NODES(nodeNumber)%BOUNDARY_NODE) THEN
+                  SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%DOMAIN%NUMBER_OF_DIMENSIONS)
+                  CASE(1)
+                    ! Only one column used, as this is the same as setting an integrated
+                    ! value so no other DOFs are affected
+                    globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
+                    IF(boundaryConditionsVariable%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_ROBIN) THEN
+                      ! Find the Robin condition number
+                      RobinConditionNumber=0
+                      DO RobinIdx=1,numberOfPointDofs
+                        IF(boundaryConditionsRobin%setDofs(RobinIdx)==globalDof) THEN
+                          RobinConditionNumber=RobinIdx
+                        END IF
+                      END DO
+                      IF(RobinConditionNumber==0) THEN
+                        CALL FlagError("Could not find matching Neuamann condition number for global DOF "// &
+                          & TRIM(NUMBER_TO_VSTRING(globalDof,"*",err,error))//" with Robin condition set.",err,error,*999)
+                      ELSE
+                        CALL LIST_ITEM_ADD(rowColumnIndicesList,RobinConditionNumber,err,error,*999)
+                      END IF
+                    END IF
+                  CASE(2)
+                    ! Loop over all lines for this node and find any DOFs that have a Robin point condition set
+                    DO lineIdx=1,topology%NODES%NODES(nodeNumber)%NUMBER_OF_NODE_LINES
+                      IF(.NOT.ALLOCATED(topology%LINES%LINES)) THEN
+                        CALL FlagError("Topology lines have not been calculated.",err,error,*999)
+                      END IF
+                      line=>topology%LINES%LINES(topology%NODES%NODES(nodeNumber)%NODE_LINES(lineIdx))
+                      IF(.NOT.line%BOUNDARY_LINE) CYCLE
+                      DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
+                        columnNodeNumber=line%NODES_IN_LINE(nodeIdx)
+                        DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
+                          derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
+                          versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
+                          columnDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                            & NODES(columnNodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                          globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(columnDof)
+                          IF(boundaryConditionsVariable%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_ROBIN) THEN
+                            RobinConditionNumber=0
+                            DO RobinIdx=1,numberOfPointDofs
+                              IF(boundaryConditionsRobin%setDofs(RobinIdx)==globalDof) THEN
+                                RobinConditionNumber=RobinIdx
+                              END IF
+                            END DO
+                            IF(RobinConditionNumber==0) THEN
+                              CALL FlagError("Could not find matching Neuamann condition number for global DOF "// &
+                                & TRIM(NUMBER_TO_VSTRING(globalDof,"*",err,error))//" with Robin condition set.",err,error,*999)
+                            ELSE
+                              CALL LIST_ITEM_ADD(rowColumnIndicesList,RobinConditionNumber,err,error,*999)
+                            END IF
+                          END IF
+                        END DO
+                      END DO
+                    END DO
+                  CASE(3)
+                    ! Loop over all faces for this node and find any DOFs that have a Robin point condition set 
+                    DO faceIdx=1,topology%NODES%NODES(nodeNumber)%NUMBER_OF_NODE_FACES
+                      IF(.NOT.ALLOCATED(topology%faces%faces)) THEN
+                        CALL FlagError("Topology faces have not been calculated.",err,error,*999)
+                      END IF
+                      face=>topology%FACES%FACES(topology%NODES%NODES(nodeNumber)%NODE_FACES(faceIdx))
+                      IF(.NOT.face%BOUNDARY_FACE) CYCLE
+                      DO nodeIdx=1,face%BASIS%NUMBER_OF_NODES
+                        columnNodeNumber=face%NODES_IN_FACE(nodeIdx)
+                        DO derivIdx=1,face%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
+                          derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
+                          versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
+                          columnDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                            & NODES(columnNodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                          globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(columnDof)
+                          IF(boundaryConditionsVariable%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_ROBIN) THEN
+                            RobinConditionNumber=0
+                            DO RobinIdx=1,numberOfPointDofs
+                              IF(boundaryConditionsRobin%setDofs(RobinIdx)==globalDof) THEN
+                                RobinConditionNumber=RobinIdx
+                              END IF
+                            END DO
+                            IF(RobinConditionNumber==0) THEN
+                              CALL FlagError("Could not find matching Neuamann condition number for global DOF "// &
+                                & TRIM(NUMBER_TO_VSTRING(globalDof,"*",err,error))//" with Robin condition set.",err,error,*999)
+                            ELSE
+                              CALL LIST_ITEM_ADD(rowColumnIndicesList,RobinConditionNumber,err,error,*999)
+                            END IF
+                          END IF
+                        END DO
+                      END DO
+                    END DO
+                  CASE DEFAULT
+                    CALL FlagError("The dimension is invalid for point Robin conditions",err,error,*999)
+                  END SELECT !number of dimensions
+                END IF
+              CASE(FIELD_ELEMENT_BASED_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE(FIELD_CONSTANT_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE(FIELD_GRID_POINT_BASED_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE(FIELD_GAUSS_POINT_BASED_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE DEFAULT
+                CALL FlagError("The interpolation type of "// &
+                  & TRIM(NUMBER_TO_VSTRING(rhsVariable%COMPONENTS(componentNumber) &
+                  & %INTERPOLATION_TYPE,"*",ERR,ERROR))//" is invalid for component number "// &
+                  & TRIM(NUMBER_TO_VSTRING(componentNumber,"*",ERR,ERROR))//".", &
+                  & err,error,*999)
+              END SELECT
+
+              !Sort and remove duplicates
+              CALL LIST_REMOVE_DUPLICATES(rowColumnIndicesList,err,error,*999)
+              !Now add all column DOFs in this row that use Robin conditions to the overall column indices
+              CALL List_AppendList(columnIndicesList,rowColumnIndicesList,err,error,*999)
+              CALL LIST_NUMBER_OF_ITEMS_GET(rowColumnIndicesList,numberRowEntries,err,error,*999)
+              rowIndices(localDof+1)=rowIndices(localDof)+numberRowEntries
+              CALL List_ClearItems(rowColumnIndicesList,err,error,*999)
+            END DO !local DOFs
+
+            CALL LIST_DESTROY(rowColumnIndicesList,err,error,*999)
+            CALL LIST_DETACH_AND_DESTROY(columnIndicesList,numberNonZeros,columnIndices,err,error,*999)
+            IF(DIAGNOSTICS1) THEN
+              CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"Robin integration matrix sparsity",err,error,*999)
+              CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"Number non-zeros = ", numberNonZeros,err,error,*999)
+              CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"Number columns = ",numberOfPointDofs,err,error,*999)
+              CALL WRITE_STRING_VALUE(DIAGNOSTIC_OUTPUT_TYPE,"Number rows = ", &
+                & rhsVariable%DOMAIN_MAPPING%TOTAL_NUMBER_OF_LOCAL,err,error,*999)
+              CALL WRITE_STRING_VECTOR(DIAGNOSTIC_OUTPUT_TYPE,1,1,numberOfPointDofs+1,6,6, &
+                & rowIndices,'("  Row indices: ",6(X,I6))', '(6X,6(X,I6))',err,error,*999)
+              CALL WRITE_STRING_VECTOR(DIAGNOSTIC_OUTPUT_TYPE,1,1,numberNonZeros,6,6, &
+                & columnIndices,'("  Column indices: ",6(X,I6))', '(6X,6(X,I6))',err,error,*999)
+            END IF
+
+            CALL DISTRIBUTED_MATRIX_STORAGE_TYPE_SET(boundaryConditionsRobin%robinMatrix%matrix, &
+              & DISTRIBUTED_MATRIX_COMPRESSED_ROW_STORAGE_TYPE,err,error,*999)
+            CALL DISTRIBUTED_MATRIX_NUMBER_NON_ZEROS_SET(boundaryConditionsRobin%robinMatrix%matrix,numberNonZeros,err,error,*999)
+            CALL DISTRIBUTED_MATRIX_STORAGE_LOCATIONS_SET(boundaryConditionsRobin%robinMatrix%matrix, &
+              & rowIndices,columnIndices(1:numberNonZeros),err,error,*999)
+
+            DEALLOCATE(localDofNumbers)
+            DEALLOCATE(rowIndices)
+            DEALLOCATE(columnIndices)
+          CASE(BOUNDARY_CONDITION_FULL_MATRICES)
+            CALL DISTRIBUTED_MATRIX_STORAGE_TYPE_SET(boundaryConditionsRobin%robinMatrix%matrix, &
+              & DISTRIBUTED_MATRIX_BLOCK_STORAGE_TYPE,err,error,*999)
+          CASE DEFAULT
+            CALL FlagError("The Robin matrix sparsity type of "// &
+                & TRIM(NUMBER_TO_VSTRING(boundaryConditionsVariable%BOUNDARY_CONDITIONS%robinBoundaryConditions% & 
+                & robinMatrixSparsity,"*",err,error))//" is invalid.",err,error,*999)
+          END SELECT
+
+          CALL DISTRIBUTED_MATRIX_CREATE_FINISH(boundaryConditionsRobin%robinMatrix%matrix,err,error,*999)
+
+          !Set up vector of Robin point values
+          CALL DISTRIBUTED_VECTOR_CREATE_START(pointDofMapping,boundaryConditionsRobin%integrationVector,err,error,*999)
+          CALL DISTRIBUTED_VECTOR_CREATE_FINISH(boundaryConditionsRobin%integrationVector,err,error,*999)
+          myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
+          !Set point values vector from boundary conditions field parameter set
+          DO RobinIdx=1,numberOfPointDofs
+            globalDof=boundaryConditionsRobin%setDofs(RobinIdx)
+            IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(globalDof)%DOMAIN_NUMBER(1)==myComputationalNodeNumber) THEN
+              localDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(globalDof)%LOCAL_NUMBER(1)
+              ! Set point DOF vector value
+              localRobinConditionIdx=boundaryConditionsRobin%pointDofMapping%GLOBAL_TO_LOCAL_MAP(RobinIdx)%LOCAL_NUMBER(1)
+              CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(rhsVariable%FIELD,rhsVariable%VARIABLE_TYPE, &
+                & FIELD_BOUNDARY_CONDITIONS_SET_TYPE,localDof,pointValue,err,error,*999)
+              CALL DISTRIBUTED_VECTOR_VALUES_SET(boundaryConditionsRobin%integrationVector, &
+                & localRobinConditionIdx,pointValue,err,error,*999)
+            END IF
+          END DO
+          CALL DISTRIBUTED_VECTOR_UPDATE_START(boundaryConditionsRobin%integrationVector,err,error,*999)
+          CALL DISTRIBUTED_VECTOR_UPDATE_FINISH(boundaryConditionsRobin%integrationVector,err,error,*999)
+
+        ELSE
+          CALL FlagError("The boundary condition Robin is not associated",err,error,*998)
+        END IF
+      ELSE
+        CALL FlagError("Boundary conditions variable is not associated.",err,error,*998)
+      END IF
+    ELSE
+      CALL FlagError("Boundary conditions is not associated.",err,error,*999)
+    END IF
+
+    EXITS("BoundaryConditions_RobinMatricesInitialise")
+    RETURN
+999 IF(ALLOCATED(rowIndices)) THEN
+      DEALLOCATE(rowIndices)
+    END IF
+    IF(ALLOCATED(columnIndices)) THEN
+      DEALLOCATE(columnIndices)
+    END IF
+    IF(ALLOCATED(localDofNumbers)) THEN
+      DEALLOCATE(localDofNumbers)
+    END IF
+    CALL BoundaryConditions_RobinMatricesFinalise(boundaryConditionsVariable,dummyErr,dummyError,*998)
+998 ERRORS("BoundaryConditions_RobinMatricesInitialise",err,error)
+    EXITS("BoundaryConditions_RobinMatricesInitialise")
+    RETURN 1
+    
+  END SUBROUTINE BoundaryConditions_RobinMatricesInitialise
+
+  !
+  !================================================================================================================================
+  !
+
+  !>Calculates integrated Robin condition values for a boundary conditions variable
+  SUBROUTINE BoundaryConditions_RobinIntegrate(rhsBoundaryConditions,err,error,*)
+
+    !Argument variables
+    TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER, INTENT(IN) :: rhsBoundaryConditions !<The boundary conditions for the right hand side field variable
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+
+    !Local variables
+    INTEGER(INTG) :: componentNumber,globalDof,localDof,RobinDofIdx,myComputationalNodeNumber
+    INTEGER(INTG) :: numberOfRobin,RobinLocalDof,RobinDofNyy
+    INTEGER(INTG) :: RobinGlobalDof,RobinNodeNumber,RobinLocalNodeNumber,RobinLocalDerivNumber
+    INTEGER(INTG) :: faceIdx,lineIdx,nodeIdx,derivIdx,gaussIdx
+    INTEGER(INTG) :: faceNumber,lineNumber
+    INTEGER(INTG) :: ms,os,nodeNumber,derivativeNumber,versionNumber
+    LOGICAL :: dependentGeometry
+    REAL(DP) :: integratedValue,phim,phio
+    TYPE(Boundary_Conditions_Type), POINTER :: boundaryConditions !<The boundary conditions for the left hand side field variable
+!    TYPE(BoundaryConditionsNeumannType), POINTER :: neumannConditions
+    TYPE(BoundaryConditionsRobinType), POINTER :: robinConditions !Elias
+    TYPE(BASIS_TYPE), POINTER :: basis
+    TYPE(FIELD_TYPE), POINTER :: geometricField
+    TYPE(FIELD_VARIABLE_TYPE), POINTER :: rhsVariable
+    TYPE(FIELD_INTERPOLATED_POINT_METRICS_PTR_TYPE), POINTER :: interpolatedPointMetrics(:)
+    TYPE(FIELD_INTERPOLATED_POINT_PTR_TYPE), POINTER :: interpolatedPoints(:)
+    TYPE(FIELD_INTERPOLATION_PARAMETERS_PTR_TYPE), POINTER :: interpolationParameters(:), scalingParameters(:)
+    TYPE(DISTRIBUTED_VECTOR_TYPE), POINTER :: integratedValues
+    TYPE(DOMAIN_TOPOLOGY_TYPE), POINTER :: topology
+    TYPE(DOMAIN_FACES_TYPE), POINTER :: faces
+    TYPE(DOMAIN_LINES_TYPE), POINTER :: lines
+    TYPE(DOMAIN_FACE_TYPE), POINTER :: face
+    TYPE(DOMAIN_LINE_TYPE), POINTER :: line
+    TYPE(DECOMPOSITION_TYPE), POINTER :: decomposition
+    TYPE(QUADRATURE_SCHEME_TYPE), POINTER :: quadratureScheme
+
+    ENTERS("BoundaryConditions_RobinIntegrate",err,error,*999)
+
+    NULLIFY(scalingParameters)
+    NULLIFY(interpolationParameters)
+    NULLIFY(interpolatedPoints)
+    NULLIFY(interpolatedPointMetrics)
+    NULLIFY(integratedValues)
+
+!    neumannConditions=>rhsBoundaryConditions%neumannBoundaryConditions
+    boundaryConditions=>rhsBoundaryConditions%BOUNDARY_CONDITIONS
+    IF(ASSOCIATED(boundaryConditions)) THEN
+        robinConditions=>boundaryConditions%robinBoundaryConditions
+    ELSE
+      CALL FlagError("boundaryConditions is not associated.",err,error,*999)
+    END IF
+
+    !Check that Robin conditions are associated, otherwise do nothing
+    IF(ASSOCIATED(robinConditions)) THEN
+      rhsVariable=>rhsBoundaryConditions%VARIABLE
+      IF(.NOT.ASSOCIATED(rhsVariable)) THEN
+        CALL FlagError("Field variable for RHS boundary conditions is not associated.",err,error,*999)
+      END IF
+
+      CALL Field_GeometricGeneralFieldGet(rhsVariable%field,geometricField,dependentGeometry,err,error,*999)
+
+      CALL DISTRIBUTED_MATRIX_ALL_VALUES_SET(robinConditions%robinMatrix%matrix,0.0_DP,err,error,*999)
+
+      numberOfRobin=rhsBoundaryConditions%DOF_COUNTS(BOUNDARY_CONDITION_ROBIN)
+      myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
+
+      ! Initialise field interpolation parameters for the geometric field, which are required for the
+      ! face/line Jacobian and scale factors
+      CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(geometricField,interpolationParameters,err,error,*999)
+      CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(rhsVariable%field,scalingParameters,err,error,*999)
+      CALL FIELD_INTERPOLATED_POINTS_INITIALISE(interpolationParameters,interpolatedPoints,err,error,*999)
+      CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoints,interpolatedPointMetrics,err,error,*999)
+
+      ! Loop over all Robin point DOFs, finding the boundary lines or faces they are on
+      ! and integrating over them
+      DO RobinDofIdx=1,numberOfRobin
+        RobinGlobalDof=robinConditions%setDofs(RobinDofIdx)
+        IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(RobinGlobalDof)%DOMAIN_NUMBER(1)==myComputationalNodeNumber) THEN
+          RobinLocalDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(RobinGlobalDof)%LOCAL_NUMBER(1)
+          ! Get Robin DOF component and topology for that component
+          RobinDofNyy=rhsVariable%DOF_TO_PARAM_MAP%DOF_TYPE(2,RobinLocalDof)
+          componentNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(4,RobinDofNyy)
+          topology=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%TOPOLOGY
+          IF(.NOT.ASSOCIATED(topology)) THEN
+            CALL FlagError("Field component topology is not associated.",err,error,*999)
+          END IF
+          decomposition=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%DECOMPOSITION
+          IF(.NOT.ASSOCIATED(decomposition)) THEN
+            CALL FlagError("Field component decomposition is not associated.",err,error,*999)
+          END IF
+          SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%INTERPOLATION_TYPE)
+          CASE(FIELD_NODE_BASED_INTERPOLATION)
+            RobinNodeNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(3,RobinDofNyy)
+            SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%DOMAIN%NUMBER_OF_DIMENSIONS)
+            CASE(1)
+              CALL DISTRIBUTED_MATRIX_VALUES_SET(robinConditions%robinMatrix%matrix,RobinLocalDof,RobinDofIdx, &
+                & 1.0_DP,err,error,*999)
+            CASE(2)
+              IF(.NOT.decomposition%CALCULATE_LINES) THEN
+                CALL FlagError("Decomposition does not have lines calculated.",err,error,*999)
+              END IF
+              lines=>topology%LINES
+              IF(.NOT.ASSOCIATED(lines)) THEN
+                CALL FlagError("Mesh topology lines is not associated.",err,error,*999)
+              END IF
+              linesLoop: DO lineIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_LINES
+                lineNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_LINES(lineIdx)
+                line=>topology%lines%lines(lineNumber)
+                IF(.NOT.line%BOUNDARY_LINE) &
+                  CYCLE linesLoop
+                basis=>line%basis
+                IF(.NOT.ASSOCIATED(basis)) THEN
+                  CALL FlagError("Line basis is not associated.",err,error,*999)
+                END IF
+                RobinLocalNodeNumber=0
+                RobinLocalDerivNumber=0
+                ! Check all nodes in line to find the local numbers for the Robin DOF, and
+                ! make sure we don't have an integrated_only condition set on the line
+                DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
+                  nodeNumber=line%NODES_IN_LINE(nodeIdx)
+                  DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
+                    derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
+                    versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
+                    localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                      & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                    globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
+                    IF(globalDof==RobinGlobalDof) THEN
+                      RobinLocalNodeNumber=nodeIdx
+                      RobinLocalDerivNumber=derivIdx
+!                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
+!                      CYCLE linesLoop
+                    END IF
+                  END DO
+                END DO
+                IF(RobinLocalNodeNumber==0) THEN
+                  CALL FlagError("Could not find local Robin node and derivative numbers in line.",err,error,*999)
+                END IF
+
+                ! Now perform actual integration
+                quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+                IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+                  CALL FlagError("Line basis default quadrature scheme is not associated.",err,error,*999)
+                END IF
+                CALL FIELD_INTERPOLATION_PARAMETERS_LINE_GET(FIELD_VALUES_SET_TYPE,lineNumber, &
+                  & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                  CALL Field_InterpolationParametersScaleFactorsLineGet(lineNumber, &
+                    & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+                END IF
+
+                DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
+                  nodeNumber=line%NODES_IN_LINE(nodeIdx)
+                  DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
+                    derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
+                    versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
+                    localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                      & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+
+                    ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                    os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
+
+                    integratedValue=0.0_DP
+                    ! Loop over line gauss points, adding gauss weighted terms to the integral
+                    DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+                      CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                        & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                      CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_LINE_TYPE, &
+                        & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+
+                      !Get basis function values at guass points
+                      phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                      phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
+
+                      !Add gauss point value to total line integral
+                      integratedValue=integratedValue+phim*phio* &
+                        & quadratureScheme%GAUSS_WEIGHTS(gaussIdx)* &
+                        & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian
+                    END DO
+
+                    ! Multiply by scale factors for dependent variable
+                    IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                      integratedValue=integratedValue* &
+                        & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
+                        & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
+                    END IF
+
+                    ! Add integral term to N matrix
+                    CALL DISTRIBUTED_MATRIX_VALUES_ADD(robinConditions%robinMatrix%matrix,localDof,RobinDofIdx, &
+                      & integratedValue,err,error,*999)
+                  END DO
+                END DO
+              END DO linesLoop
+            CASE(3)
+              IF(.NOT.decomposition%CALCULATE_FACES) THEN
+                CALL FlagError("Decomposition does not have faces calculated.",err,error,*999)
+              END IF
+              faces=>topology%FACES
+              IF(.NOT.ASSOCIATED(faces)) THEN
+                CALL FlagError("Mesh topology faces is not associated.",err,error,*999)
+              END IF
+              facesLoop: DO faceIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_FACES 
+                faceNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_FACES(faceIdx)
+                face=>topology%FACES%FACES(faceNumber)
+                IF(.NOT.face%BOUNDARY_FACE) &
+                  CYCLE facesLoop
+                basis=>face%BASIS
+                IF(.NOT.ASSOCIATED(basis)) THEN
+                  CALL FlagError("Line face is not associated.",err,error,*999)
+                END IF
+                RobinLocalNodeNumber=0
+                RobinLocalDerivNumber=0
+                ! Check all nodes in the face to find the local numbers for the Robin DOF, and
+                ! make sure we don't have an integrated_only condition set on the face
+                DO nodeIdx=1,basis%NUMBER_OF_NODES
+                  nodeNumber=face%NODES_IN_FACE(nodeIdx)
+                  DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+                    derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
+                    versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
+                    localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                      & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                    globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
+                    IF(globalDof==RobinGlobalDof) THEN
+                      RobinLocalNodeNumber=nodeIdx
+                      RobinLocalDerivNumber=derivIdx
+!                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
+!                      CYCLE facesLoop
+                    END IF
+                  END DO
+                END DO
+                IF(RobinLocalNodeNumber==0) THEN
+                  CALL FlagError("Could not find local Robin node and derivative numbers in line.",err,error,*999)
+                END IF
+
+                ! Now perform actual integration
+                quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+                IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+                  CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
+                END IF
+                CALL FIELD_INTERPOLATION_PARAMETERS_FACE_GET(FIELD_VALUES_SET_TYPE,faceNumber, &
+                  & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                  CALL Field_InterpolationParametersScaleFactorsFaceGet(faceNumber, &
+                    & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+                END IF
+
+                DO nodeIdx=1,basis%NUMBER_OF_NODES
+                  nodeNumber=face%NODES_IN_FACE(nodeIdx)
+                  DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+                    derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
+                    versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
+                    localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                      & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+
+                    ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                    os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
+
+                    integratedValue=0.0_DP
+                    ! Loop over line gauss points, adding gauss weighted terms to the integral
+                    DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+                      CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                        & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                      CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_AREA_TYPE, &
+                        & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+
+                      !Get basis function values at guass points
+                      phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                      phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
+
+                      !Add gauss point value to total line integral
+                      integratedValue=integratedValue+phim*phio* &
+                        & quadratureScheme%GAUSS_WEIGHTS(gaussIdx)* &
+                        & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian
+                    END DO
+
+                    ! Multiply by scale factors
+                    IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                      integratedValue=integratedValue* &
+                        & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
+                        & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
+                    END IF
+
+                    ! Add integral term to N matrix
+                    CALL DISTRIBUTED_MATRIX_VALUES_ADD(robinConditions%robinMatrix%matrix,localDof,RobinDofIdx, &
+                      & integratedValue,err,error,*999)
+                  END DO
+                END DO
+              END DO facesLoop
+            CASE DEFAULT
+              CALL FlagError("The dimension is invalid for point Robin conditions",err,error,*999)
+            END SELECT
+          CASE(FIELD_ELEMENT_BASED_INTERPOLATION)
+            CALL FlagError("Not implemented.",err,error,*999)
+          CASE(FIELD_CONSTANT_INTERPOLATION)
+            CALL FlagError("Not implemented.",err,error,*999)
+          CASE(FIELD_GRID_POINT_BASED_INTERPOLATION)
+            CALL FlagError("Not implemented.",err,error,*999)
+          CASE(FIELD_GAUSS_POINT_BASED_INTERPOLATION)
+            CALL FlagError("Not implemented.",err,error,*999)
+          CASE DEFAULT
+            CALL FlagError("The interpolation type of "// &
+              & TRIM(NUMBER_TO_VSTRING(rhsVariable%COMPONENTS(componentNumber) &
+              & %INTERPOLATION_TYPE,"*",ERR,ERROR))//" is invalid for component number "// &
+              & TRIM(NUMBER_TO_VSTRING(componentNumber,"*",ERR,ERROR))//".", &
+              & err,error,*999)
+          END SELECT
+        END IF
+      END DO
+
+      CALL DISTRIBUTED_MATRIX_UPDATE_START(robinConditions%robinMatrix%matrix,err,error,*999)
+      CALL DISTRIBUTED_MATRIX_UPDATE_FINISH(robinConditions%robinMatrix%matrix,err,error,*999)
+
+!      CALL FIELD_PARAMETER_SET_VECTOR_GET(rhsVariable%field,rhsVariable%variable_type,FIELD_INTEGRATED_Robin_SET_TYPE, &
+!        & integratedValues,err,error,*999)
+!      CALL DISTRIBUTED_VECTOR_ALL_VALUES_SET(integratedValues,0.0_DP,err,error,*999)
+      ! Perform matrix multiplication, f = N q, to calculate force vector from integration matrix and point values
+!      CALL DISTRIBUTED_MATRIX_BY_VECTOR_ADD(DISTRIBUTED_MATRIX_VECTOR_NO_GHOSTS_TYPE,1.0_DP, &
+!        & robinConditions%robinMatrix%matrix,robinConditions%pointValues,integratedValues, &
+!        & err,error,*999)
+
+!      CALL FIELD_PARAMETER_SET_UPDATE_START(rhsVariable%FIELD,rhsVariable%VARIABLE_TYPE,FIELD_INTEGRATED_Robin_SET_TYPE, &
+!        & err,error,*999)
+      IF(DIAGNOSTICS1) THEN
+        IF(dependentGeometry) THEN
+          CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Using dependent field geometry",err,error,*999)
+        ELSE
+          CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Using undeformed geometry",err,error,*999)
+        END IF
+        CALL WRITE_STRING_VECTOR(DIAGNOSTIC_OUTPUT_TYPE,1,1,numberOfRobin,6,6,robinConditions%setDofs, &
+          & '("  setDofs:",6(X,I8))', '(10X,6(X,I8))',err,error,*999)
+        CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Robin point values",err,error,*999)
+!        CALL DISTRIBUTED_VECTOR_OUTPUT(DIAGNOSTIC_OUTPUT_TYPE,robinConditions%pointValues,err,error,*999)
+        CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Robin integration matrix",err,error,*999)
+        CALL DISTRIBUTED_MATRIX_OUTPUT(DIAGNOSTIC_OUTPUT_TYPE,robinConditions%robinMatrix%matrix,err,error,*999)
+        CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Integrated values",err,error,*999)
+!        CALL DISTRIBUTED_VECTOR_OUTPUT(DIAGNOSTIC_OUTPUT_TYPE,integratedValues,err,error,*999)
+      END IF
+!      CALL FIELD_PARAMETER_SET_UPDATE_FINISH(rhsVariable%FIELD,rhsVariable%VARIABLE_TYPE,FIELD_INTEGRATED_Robin_SET_TYPE, &
+!        & err,error,*999)
+
+    END IF !Robin conditions associated
+
+    EXITS("BoundaryConditions_RobinIntegrate")
+    RETURN
+999 ERRORSEXITS("BoundaryConditions_RobinIntegrate",err,error)
+    RETURN 1
+  END SUBROUTINE BoundaryConditions_RobinIntegrate
+
+  !
+  !================================================================================================================================
+  !
+
 
 END MODULE BOUNDARY_CONDITIONS_ROUTINES

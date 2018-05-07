@@ -313,7 +313,7 @@ int main()
     }
   Err = cmfe_Decomposition_NodeDomainGet(Decomposition,FirstNodeNumber,1,&FirstNodeDomain);
   Err = cmfe_Decomposition_NodeDomainGet(Decomposition,LastNodeNumber,1,&LastNodeDomain);
-  if(FirstNodeDomain==ComputationalNodeNumber)
+/*  if(FirstNodeDomain==ComputationalNodeNumber)
     {
       Err = cmfe_BoundaryConditions_SetNode(BoundaryConditions,DependentField,CMFE_FIELD_U_VARIABLE_TYPE,1,1,FirstNodeNumber,1, \
         CMFE_BOUNDARY_CONDITION_FIXED,0.0);
@@ -322,7 +322,7 @@ int main()
     {
       Err = cmfe_BoundaryConditions_SetNode(BoundaryConditions,DependentField,CMFE_FIELD_U_VARIABLE_TYPE,1,1,LastNodeNumber,1, \
         CMFE_BOUNDARY_CONDITION_FIXED,1.0);
-    }
+    }*/
   /* Finish the creation of the equations set boundary conditions */
   Err = cmfe_SolverEquations_BoundaryConditionsCreateFinish(SolverEquations);
 

@@ -945,7 +945,8 @@ MODULE OpenCMISS_Iron
   INTERFACE cmfe_BoundaryConditions_SetNode
     MODULE PROCEDURE cmfe_BoundaryConditions_SetNodeNumber0
     MODULE PROCEDURE cmfe_BoundaryConditions_SetNodeNumber1
-    MODULE PROCEDURE cmfe_BoundaryConditions_SetNodeObj
+    MODULE PROCEDURE cmfe_BoundaryConditions_SetNodeObj0
+    MODULE PROCEDURE cmfe_BoundaryConditions_SetNodeObj1
   END INTERFACE cmfe_BoundaryConditions_SetNode
 
   !>Sets the matrix sparsity type for Neumann integration matrices, used when integrating Neumann point values.
@@ -12869,7 +12870,7 @@ CONTAINS
   !
 
   !>Sets the value of the specified node and sets this as a boundary condition on the specified node for boundary conditions identified by an object.
-  SUBROUTINE cmfe_BoundaryConditions_SetNodeObj(boundaryConditions,field,variableType,versionNumber,derivativeNumber, &
+  SUBROUTINE cmfe_BoundaryConditions_SetNodeObj0(boundaryConditions,field,variableType,versionNumber,derivativeNumber, &
     & nodeUserNumber,componentNumber,condition,value,err)
     !DLLEXPORT(cmfe_BoundaryConditions_SetNodeObj)
 
@@ -12886,19 +12887,53 @@ CONTAINS
     INTEGER(INTG), INTENT(OUT) :: err !<The error code.
     !Local variables
 
-    ENTERS("cmfe_BoundaryConditions_SetNodeObj",err,error,*999)
+    ENTERS("cmfe_BoundaryConditions_SetNodeObj0",err,error,*999)
 
     CALL BOUNDARY_CONDITIONS_SET_NODE(boundaryConditions%boundaryConditions,field%field,variableType,versionNumber, &
       & derivativeNumber,nodeUserNumber,componentNumber,condition,value,err,error,*999)
 
-    EXITS("cmfe_BoundaryConditions_SetNodeObj")
+    EXITS("cmfe_BoundaryConditions_SetNodeObj0")
     RETURN
-999 ERRORSEXITS("cmfe_BoundaryConditions_SetNodeObj",err,error)
+999 ERRORSEXITS("cmfe_BoundaryConditions_SetNodeObj0",err,error)
     CALL cmfe_HandleError(err,error)
     RETURN
 
-  END SUBROUTINE cmfe_BoundaryConditions_SetNodeObj
+  END SUBROUTINE cmfe_BoundaryConditions_SetNodeObj0
 
+  !
+  !================================================================================================================================
+  !
+  !Elias
+
+  !>Sets the value of the specified node and sets this as a boundary condition on the specified node for boundary conditions identified by an object.
+  SUBROUTINE cmfe_BoundaryConditions_SetNodeObj1(boundaryConditions,field,variableType,versionNumber,derivativeNumber, &
+    & nodeUserNumber,componentNumber,condition,value,err)
+
+    !Argument variables
+    TYPE(cmfe_BoundaryConditionsType), INTENT(IN) :: boundaryConditions !<The boundary conditions to set the node to.
+    TYPE(cmfe_FieldType), INTENT(IN) :: field !<The dependent field to set the boundary condition on.
+    INTEGER(INTG), INTENT(IN) :: variableType !<The variable type of the dependent field to set the boundary condition at. \see OPENCMISS_FieldVariableTypes
+    INTEGER(INTG), INTENT(IN) :: versionNumber !<The user number of the node derivative version to set the boundary conditions for.
+    INTEGER(INTG), INTENT(IN) :: derivativeNumber !<The user number of the node derivative to set the boundary conditions for.
+    INTEGER(INTG), INTENT(IN) :: nodeUserNumber !<The user number of the node to set the boundary conditions for.
+    INTEGER(INTG), INTENT(IN) :: componentNumber !<The component number of the dependent field to set the boundary condition at.
+    INTEGER(INTG), INTENT(IN) :: condition !<The boundary condition type to set \see OPENCMISS_BoundaryConditionsTypes,OPENCMISS
+    REAL(DP), INTENT(IN) :: value(:) !<The values of the boundary condition to set.
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code.
+    !Local variables
+
+    ENTERS("cmfe_BoundaryConditions_SetNodeObj1",err,error,*999)
+
+    CALL BOUNDARY_CONDITIONS_SET_NODE(boundaryConditions%boundaryConditions,field%field,variableType,versionNumber, &
+      & derivativeNumber,nodeUserNumber,componentNumber,condition,[value],err,error,*999)
+
+    EXITS("cmfe_BoundaryConditions_SetNodeObj1")
+    RETURN
+999 ERRORSEXITS("cmfe_BoundaryConditions_SetNodeObj1",err,error)
+    CALL cmfe_HandleError(err,error)
+    RETURN
+
+  END SUBROUTINE cmfe_BoundaryConditions_SetNodeObj1
   !
   !================================================================================================================================
   !

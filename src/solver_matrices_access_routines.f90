@@ -95,7 +95,7 @@ CONTAINS
     
     EXITS("SolverMatrices_LibraryTypeGet")
     RETURN
-999 ERRORSEXITS("SolverMatrices_LibraryTypeGet",ERR,ERROR)
+999 ERRORSEXITS("SolverMatrices_LibraryTypeGet",err,error)
     RETURN 1
     
   END SUBROUTINE SolverMatrices_LibraryTypeGet
@@ -129,7 +129,6 @@ CONTAINS
     RETURN 1
     
   END SUBROUTINE SolverMatrices_SolverMappingGet
-  
 
   !
   !================================================================================================================================

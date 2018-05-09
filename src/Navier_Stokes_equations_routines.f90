@@ -14,7 +14,7 @@ MODULE NAVIER_STOKES_EQUATIONS_ROUTINES
   USE Constants
   USE CONTROL_LOOP_ROUTINES
   USE COORDINATE_ROUTINES
-  USE DISTRIBUTED_MATRIX_VECTOR
+  USE DistributedMatrixVector
   USE DOMAIN_MAPPINGS
   USE EquationsRoutines
   USE EquationsAccessRoutines
@@ -22,7 +22,7 @@ MODULE NAVIER_STOKES_EQUATIONS_ROUTINES
   USE EquationsMappingAccessRoutines
   USE EquationsMatricesRoutines
   USE EquationsMatricesAccessRoutines
-  USE EQUATIONS_SET_CONSTANTS
+  USE EquationsSetConstants
   USE EquationsSetAccessRoutines
   USE FIELD_ROUTINES
   USE FieldAccessRoutines
@@ -33,15 +33,14 @@ MODULE NAVIER_STOKES_EQUATIONS_ROUTINES
   USE INPUT_OUTPUT
   USE ISO_VARYING_STRING
   USE Kinds
-  USE LAPACK
+  USE Lapack
   USE Maths
-  USE MATRIX_VECTOR
+  USE MatrixVector
   USE MESH_ROUTINES
   USE MeshAccessRoutines
 #ifndef NOMPIMOD
   USE MPI
 #endif
-  USE NODE_ROUTINES
   USE PROBLEM_CONSTANTS
   USE STREE_EQUATION_ROUTINES
   USE Strings
@@ -2688,7 +2687,7 @@ CONTAINS
                           CALL NavierStokes_PreSolveUpdateBoundaryConditions(SOLVER,ERR,ERROR,*999)
                         ! --- A d v e c t i o n   S o l v e r ---
                         CASE(EQUATIONS_SET_ADVECTION_SUBTYPE)
-                          CALL ADVECTION_PRE_SOLVE(SOLVER,err,error,*999)
+                          CALL Advection_PreSolve(solver,err,error,*999)
                         CASE DEFAULT
                           localError="Equations set subtype "//TRIM(NUMBER_TO_VSTRING(EQUATIONS_SET%SPECIFICATION(3),"*", &
                             & err,error))//" is not valid for a nonlinear Navier-Stokes solver."
@@ -2881,7 +2880,7 @@ CONTAINS
                   END IF
                 ELSE
                   ! --- A d v e c t i o n   S o l v e r ---
-                  CALL ADVECTION_PRE_SOLVE(SOLVER,err,error,*999)
+                  CALL Advection_PreSolve(solver,err,error,*999)
                 END IF
                 ! Update boundary conditions
                 CALL NavierStokes_PreSolveUpdateBoundaryConditions(SOLVER,err,error,*999)
@@ -7334,10 +7333,10 @@ CONTAINS
                                                   materialsField=>EQUATIONS_SET%MATERIALS%MATERIALS_FIELD
                                                   !Define MU_PARAM, density=1
                                                   MU_PARAM=materialsField%variables(1)%parameter_sets%parameter_sets(1)%ptr% &
-                                                    & parameters%cmiss%data_dp(1)
+                                                    & parameters%cmiss%dataDP(1)
                                                   !Define RHO_PARAM, density=2
                                                   RHO_PARAM=materialsField%variables(1)%parameter_sets%parameter_sets(1)%ptr% &
-                                                    & parameters%cmiss%data_dp(2)
+                                                    & parameters%cmiss%dataDP(2)
                                                   CALL NAVIER_STOKES_ANALYTIC_FUNCTIONS_EVALUATE(ANALYTIC_FUNCTION_TYPE,X, &
                                                     & CURRENT_TIME,variable_type,GLOBAL_DERIV_INDEX,componentIdx, &
                                                     & NUMBER_OF_DIMENSIONS,FIELD_VARIABLE%NUMBER_OF_COMPONENTS, &
@@ -8488,13 +8487,13 @@ CONTAINS
                                             FluidNodeNumber=node_idx
                                             DO search_idx=1,SIZE(Solver2%SOLVER_equations%SOLVER_MAPPING% &
                                               & INTERFACE_CONDITIONS(1)%ptr%INTERFACE% &
-                                              & NODES%COUPLED_NODES(2,:))
+                                              & NODES%coupledNodes(2,:))
                                               IF(Solver2%SOLVER_equations%SOLVER_MAPPING% &
                                                 & INTERFACE_CONDITIONS(1)%ptr%INTERFACE% &
-                                                & NODES%COUPLED_NODES(2,search_idx)==node_idx) THEN
+                                                & NODES%coupledNodes(2,search_idx)==node_idx) THEN
                                                 SolidNodeNumber=Solver2%SOLVER_equations%SOLVER_MAPPING% &
                                                   & INTERFACE_CONDITIONS(1)%ptr%INTERFACE% &
-                                                  & NODES%COUPLED_NODES(1,search_idx)!might wanna put a break here
+                                                  & NODES%coupledNodes(1,search_idx)!might wanna put a break here
                                                 SolidNodeFound=.TRUE.
                                               END IF
                                             END DO
@@ -8702,7 +8701,7 @@ CONTAINS
     TYPE(FIELD_VARIABLE_TYPE), POINTER :: fluidGeometricVariable,interfaceGeometricVariable
     TYPE(INTERFACE_TYPE), POINTER :: fsiInterface
     TYPE(INTERFACE_CONDITION_TYPE), POINTER :: fsiInterfaceCondition
-    TYPE(NODES_TYPE), POINTER :: interfaceNodes
+    TYPE(NodesType), POINTER :: interfaceNodes
     TYPE(PROBLEM_TYPE), POINTER :: problem
     TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: laplaceSolverEquations,fluidSolverEquations,fsiSolverEquations
     TYPE(SOLVER_MAPPING_TYPE), POINTER :: laplaceSolverMapping,fsiSolverMapping,fluidSolverMapping,solidSolverMapping
@@ -9019,8 +9018,8 @@ CONTAINS
                   NULLIFY(domainNodes)
                   CALL DomainTopology_NodesGet(domainTopology,domainNodes,err,error,*999)
                   DO nodeIdx=1,domainNodes%TOTAL_NUMBER_OF_NODES
-                    solidNode=interfaceNodes%COUPLED_NODES(1,nodeIdx)
-                    fluidNode=interfaceNodes%COUPLED_NODES(2,nodeIdx)
+                    solidNode=interfaceNodes%coupledNodes(1,nodeIdx)
+                    fluidNode=interfaceNodes%coupledNodes(2,nodeIdx)
                     DO derivativeIdx=1,domainNodes%nodes(nodeIdx)%NUMBER_OF_DERIVATIVES
                       DO versionIdx=1,domainNodes%nodes(nodeIdx)%derivatives(derivativeIdx)%numberOfVersions
                         CALL Field_ParameterSetGetNode(solidDependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &

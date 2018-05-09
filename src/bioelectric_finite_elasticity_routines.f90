@@ -48,6 +48,7 @@ MODULE BIOELECTRIC_FINITE_ELASTICITY_ROUTINES
 
   USE BaseRoutines
   USE BasisRoutines
+  USE BasisAccessRoutines
   USE BIOELECTRIC_ROUTINES
   USE BIODOMAIN_EQUATION_ROUTINES
   USE Constants
@@ -58,7 +59,7 @@ MODULE BIOELECTRIC_FINITE_ELASTICITY_ROUTINES
   USE EquationsMappingRoutines
   USE EquationsMappingAccessRoutines
   USE EquationsMatricesRoutines
-  USE EQUATIONS_SET_CONSTANTS
+  USE EquationsSetConstants
   USE FIELD_IO_ROUTINES
   USE FIELD_ROUTINES
   USE FieldAccessRoutines

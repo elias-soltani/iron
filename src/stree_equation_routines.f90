@@ -56,13 +56,13 @@ MODULE Stree_EQUATION_ROUTINES
   USE CmissMPI
   USE ComputationEnvironment
   USE COORDINATE_ROUTINES
-  USE DISTRIBUTED_MATRIX_VECTOR
+  USE DistributedMatrixVector
   USE DOMAIN_MAPPINGS
   USE EquationsRoutines
   USE EquationsAccessRoutines
   USE EquationsMappingRoutines
   USE EquationsMatricesRoutines
-  USE EQUATIONS_SET_CONSTANTS
+  USE EquationsSetConstants
   USE EquationsSetAccessRoutines
   USE FIELD_ROUTINES
   USE FieldAccessRoutines
@@ -72,9 +72,8 @@ MODULE Stree_EQUATION_ROUTINES
   USE ISO_VARYING_STRING
   USE Kinds
   USE Maths
-  USE MATRIX_VECTOR
+  USE MatrixVector
   USE MESH_ROUTINES
-  USE NODE_ROUTINES
   USE PROBLEM_CONSTANTS
   USE Strings
   USE SOLVER_ROUTINES

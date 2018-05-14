@@ -215,9 +215,9 @@ MODULE BOUNDARY_CONDITIONS_ROUTINES
     MODULE PROCEDURE BOUNDARY_CONDITIONS_SET_ELEMENT
   END INTERFACE BoundaryConditions_SetElement
 
-  INTERFACE BoundaryConditions_SetNode
-    MODULE PROCEDURE BOUNDARY_CONDITIONS_SET_NODE
-  END INTERFACE BoundaryConditions_SetNode
+!  INTERFACE BoundaryConditions_SetNode
+!    MODULE PROCEDURE BOUNDARY_CONDITIONS_SET_NODE
+!  END INTERFACE BoundaryConditions_SetNode
 
   !>Sets a boundary condition on the specified Node. 
   INTERFACE BOUNDARY_CONDITIONS_SET_NODE
@@ -253,11 +253,7 @@ MODULE BOUNDARY_CONDITIONS_ROUTINES
 
   PUBLIC BOUNDARY_CONDITIONS_ADD_LOCAL_DOF
 
-<<<<<<< HEAD
-  PUBLIC BOUNDARY_CONDITIONS_SET_CONSTANT,BOUNDARY_CONDITIONS_SET_LOCAL_DOF,BOUNDARY_CONDITIONS_SET_ELEMENT, &
-    & BOUNDARY_CONDITIONS_SET_NODE,BoundaryConditions_NeumannIntegrate,BoundaryConditions_NeumannSparsityTypeSet, &
-    & BoundaryConditions_RobinSparsityTypeSet,BoundaryConditions_RobinIntegrate
-=======
+
   PUBLIC BoundaryConditions_AddLocalDOF
 
   PUBLIC BOUNDARY_CONDITIONS_ADD_ELEMENT
@@ -286,12 +282,15 @@ MODULE BOUNDARY_CONDITIONS_ROUTINES
 
   PUBLIC BOUNDARY_CONDITIONS_SET_NODE
 
-  PUBLIC BoundaryConditions_SetNode
+!  PUBLIC BoundaryConditions_SetNode
 
   PUBLIC BoundaryConditions_NeumannIntegrate
 
   PUBLIC BoundaryConditions_NeumannSparsityTypeSet
->>>>>>> 94b92ecb6d87806b0e8681c9acd97c9727db9f6b
+
+  PUBLIC BoundaryConditions_RobinSparsityTypeSet
+
+  PUBLIC BoundaryConditions_RobinIntegrate
 
   PUBLIC BoundaryConditions_ConstrainNodeDofsEqual!,BoundaryConditionsValuesSet
 
@@ -4931,7 +4930,7 @@ CONTAINS
     TYPE(FIELD_INTERPOLATED_POINT_METRICS_PTR_TYPE), POINTER :: interpolatedPointMetrics(:)
     TYPE(FIELD_INTERPOLATED_POINT_PTR_TYPE), POINTER :: interpolatedPoints(:)
     TYPE(FIELD_INTERPOLATION_PARAMETERS_PTR_TYPE), POINTER :: interpolationParameters(:), scalingParameters(:)
-    TYPE(DISTRIBUTED_VECTOR_TYPE), POINTER :: integratedValues
+    TYPE(DistributedVectorType), POINTER :: integratedValues
     TYPE(DOMAIN_TOPOLOGY_TYPE), POINTER :: topology
     TYPE(DOMAIN_FACES_TYPE), POINTER :: faces
     TYPE(DOMAIN_LINES_TYPE), POINTER :: lines

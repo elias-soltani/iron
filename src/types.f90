@@ -2060,7 +2060,7 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
     INTEGER(INTG), ALLOCATABLE :: setDofs(:) !<setDofs(robin_idx): the global dof for the robin_idx'th Robin condition
     INTEGER(INTG) :: robinMatrixSparsity !<The sparsity type of the Robin integration matrices. \see SOLVER_ROUTINES_SparsityTypes,SOLVER_ROUTINES
     TYPE(EquationsMatrixType), POINTER :: robinMatrix !<The K' matrix that adds to the stiffness matrix K to give the A matrix. Number of rows equals number of local dofs, and number of columns equals number of set point DOFs.
-    TYPE(DISTRIBUTED_VECTOR_TYPE), POINTER :: integrationVector !<The vector of set point values q    integrationVector
+    TYPE(DistributedVectorType), POINTER :: integrationVector !<The vector of set point values q    integrationVector
     TYPE(DOMAIN_MAPPING_TYPE), POINTER :: pointDofMapping !<The domain mapping for DOFs with Neumann point conditions set.
   END TYPE BoundaryConditionsRobinType
 

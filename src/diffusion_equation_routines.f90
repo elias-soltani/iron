@@ -3145,32 +3145,32 @@ CONTAINS
     updateBoundaryConditions = .TRUE.
 
 
-    IF(ASSOCIATED(CONTROL_LOOP)) THEN
+    IF(ASSOCIATED(controlLoop)) THEN
       IF(ASSOCIATED(SOLVER)) THEN
-        IF(ASSOCIATED(CONTROL_LOOP%PROBLEM)) THEN
-          IF(.NOT.ALLOCATED(CONTROL_LOOP%PROBLEM%SPECIFICATION)) THEN
+        IF(ASSOCIATED(controlLoop%PROBLEM)) THEN
+          IF(.NOT.ALLOCATED(controlLoop%PROBLEM%SPECIFICATION)) THEN
             CALL FlagError("Problem specification is not allocated.",err,error,*999)
-          ELSE IF(SIZE(CONTROL_LOOP%PROBLEM%SPECIFICATION,1)<3) THEN
+          ELSE IF(SIZE(controlLoop%PROBLEM%SPECIFICATION,1)<3) THEN
             CALL FlagError("Problem specification must have three entries for a Diffusion problem.",err,error,*999)
           END IF
-          SELECT CASE(CONTROL_LOOP%PROBLEM%SPECIFICATION(3))
+          SELECT CASE(controlLoop%PROBLEM%SPECIFICATION(3))
           CASE(PROBLEM_NO_SOURCE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_DIFFUSION_SUBTYPE, &
             & PROBLEM_NONLINEAR_SOURCE_DIFFUSION_SUBTYPE)
             ! do nothing ???
-!            CALL Diffusion_PreSolveUpdateAnalyticValues(CONTROL_LOOP,SOLVER,err,error,*999)
+!            CALL Diffusion_PreSolveUpdateAnalyticValues(controlLoop,SOLVER,err,error,*999)
           CASE(PROBLEM_NO_SOURCE_ALE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE, &
             & PROBLEM_NONLINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE)
             CALL WRITE_STRING(GENERAL_OUTPUT_TYPE,"ALE diffusion pre solve... ",err,error,*999)
             IF(SOLVER%DYNAMIC_SOLVER%ALE) THEN
               !First update mesh and calculate boundary velocity values
-              CALL Diffusion_PreSolveALEUpdateMesh(CONTROL_LOOP,SOLVER,err,error,*999)
+              CALL Diffusion_PreSolveALEUpdateMesh(controlLoop,SOLVER,err,error,*999)
               !Then apply both normal and moving mesh boundary conditions
-              !CALL DIFFUSION_PRE_SOLVE_UPDATE_BOUNDARY_CONDITIONS(CONTROL_LOOP,SOLVER,err,error,*999)
+              !CALL DIFFUSION_PRE_SOLVE_UPDATE_BOUNDARY_CONDITIONS(controlLoop,SOLVER,err,error,*999)
             ELSE  
               CALL FlagError("Mesh motion calculation not successful for ALE problem.",err,error,*999)
             END IF
           CASE DEFAULT
-            localError="Problem subtype "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(3),"*",err,error))// &
+            localError="Problem subtype "//TRIM(NUMBER_TO_VSTRING(controlLoop%PROBLEM%SPECIFICATION(3),"*",err,error))// &
               & " is not valid for a diffusion equation type of a classical field problem class."
             CALL FlagError(localError,err,error,*999)
           END SELECT
@@ -4251,26 +4251,26 @@ CONTAINS
     ENTERS("Diffusion_PostSolve",err,error,*999)
     
 
-    NULLIFY(SOLVER2)
+    NULLIFY(SOLVER)
 
-    IF(ASSOCIATED(CONTROL_LOOP)) THEN
+    IF(ASSOCIATED(controlLoop)) THEN
       IF(ASSOCIATED(SOLVER)) THEN
-        IF(ASSOCIATED(CONTROL_LOOP%PROBLEM)) THEN 
-          IF(.NOT.ALLOCATED(CONTROL_LOOP%PROBLEM%SPECIFICATION)) THEN
+        IF(ASSOCIATED(controlLoop%PROBLEM)) THEN 
+          IF(.NOT.ALLOCATED(controlLoop%PROBLEM%SPECIFICATION)) THEN
             CALL FlagError("Problem specification is not allocated.",err,error,*999)
-          ELSE IF(SIZE(CONTROL_LOOP%PROBLEM%SPECIFICATION,1)<3) THEN
+          ELSE IF(SIZE(controlLoop%PROBLEM%SPECIFICATION,1)<3) THEN
             CALL FlagError("Problem specification must have three entries for a Diffusion problem.",err,error,*999)
           END IF
-          SELECT CASE(CONTROL_LOOP%PROBLEM%SPECIFICATION(3))
+          SELECT CASE(controlLoop%PROBLEM%SPECIFICATION(3))
           CASE(PROBLEM_NO_SOURCE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_DIFFUSION_SUBTYPE, &
             & PROBLEM_NO_SOURCE_ALE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE)
-            CALL DIFFUSION_EQUATION_POST_SOLVE_OUTPUT_DATA(CONTROL_LOOP,SOLVER,err,error,*999)
+            CALL DIFFUSION_EQUATION_POST_SOLVE_OUTPUT_DATA(controlLoop,SOLVER,err,error,*999)
           CASE(PROBLEM_NONLINEAR_SOURCE_DIFFUSION_SUBTYPE)
             ! do nothing ???
           CASE(PROBLEM_NONLINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE)
             CALL FlagError("Not implemented.",err,error,*999)
           CASE DEFAULT
-            localError="Problem subtype "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(3),"*",err,error))// &
+            localError="Problem subtype "//TRIM(NUMBER_TO_VSTRING(controlLoop%PROBLEM%SPECIFICATION(3),"*",err,error))// &
               & " is not valid for a diffusion type of a classical field problem class."
             CALL FlagError(localError,err,error,*999)
           END SELECT

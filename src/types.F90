@@ -2010,18 +2010,76 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
     TYPE(BoundaryConditionsDofConstraintsType), POINTER :: dofConstraints !<A pointer to the linear DOF constraints structure.
   END TYPE BOUNDARY_CONDITIONS_VARIABLE_TYPE
 
+
+
   !>A buffer type to allow for an array of pointers to a VARIABLE_BOUNDARY_CONDITIONS_TYPE \see Types::VARIABLE_BOUNDARY_CONDITIONS_TYPE
   TYPE BOUNDARY_CONDITIONS_VARIABLE_PTR_TYPE
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: PTR !<A pointer to the boundary conditions variable
   END TYPE BOUNDARY_CONDITIONS_VARIABLE_PTR_TYPE
+  
+!  TYPE BoundaryConitionsValuesPtrType
+!    TYPE(BoundaryConditionsValuesType), POINTER :: 
+!  END TYPE BoundaryConditionsValuesPtrType
 
-  !>Contains information on the boundary conditions for the solver equations. \see OPENCMISS::Iron::cmfe_BoundaryConditionsType
+  TYPE RobinValuesType
+!ELIAS
+    REAL(DP) :: U_Coefficient !<Stores coefficient of U for Robin boundary Conditions Alpha*T+Beta*DelTDeln=Gamma
+    REAL(DP) :: DelUDeln_Coefficient !<Stores coefficient of DelUDeln for Robin boundary Conditions Alpha*T+Beta*DelTDeln=Gamma
+    REAL(DP) :: robinValue !<Stores Gamma Alpha*T+Beta*DelTDeln=Gamma
+  END TYPE RobinValuesType
+
+  TYPE BoundaryConditionsValuesType
+!Elias
+    INTEGER(INTG) :: boundary
+    LOGICAL(INTG) :: boundaryNode !<Is .TRUE. if the node is on boundary
+    REAL(DP) :: dirichletValue  !<Stores node value for Dirichlet boundary conditions
+    REAL(DP) :: neumannValue  !<Stores node value for Neumann boundary conditions
+    TYPE(RobinValuesType), POINTER :: robinValues !<A pointer to the Robin coefficients and values.
+    TYPE(BoundaryConditionsDofType), POINTER :: dofType !Elias
+  END TYPE BoundaryConditionsValuesType
+
+  TYPE BoundaryConditionsDofType
+!Elias
+    INTEGER(INTG) :: rowBCtype
+    REAL(DP), ALLOCATABLE :: values(:)
+  END TYPE BoundaryConditionsDofType
+
+  TYPE BoundaryConditions_Dof2valueParam_map
+    INTEGER(INTG) :: numberOfvalues
+    INTEGER(INTG), ALLOCATABLE :: valuesNumber(:)
+  END TYPE BoundaryConditions_Dof2valueParam_map
+
+  TYPE BoundaryConditionsDofTypes
+    INTEGER(INTG), ALLOCATABLE :: rowBCtypes(:)
+    INTEGER(INTG) :: numberOfValues
+    REAL(DP), ALLOCATABLE :: values(:)
+    TYPE(BoundaryConditions_Dof2valueParam_map), ALLOCATABLE :: DOFs(:)
+  END TYPE BoundaryConditionsDofTypes
+
+  TYPE BoundaryConditionsRobinType
+!Elias
+    INTEGER(INTG), ALLOCATABLE :: setDofs(:) !<setDofs(robin_idx): the global dof for the robin_idx'th Robin condition
+    INTEGER(INTG) :: robinMatrixSparsity !<The sparsity type of the Robin integration matrices. \see SOLVER_ROUTINES_SparsityTypes,SOLVER_ROUTINES
+!    INTEGER(INTG) :: robinMatrixSparsity !<The sparsity type of the Robin integration matrices. \see SOLVER_ROUTINES_SparsityTypes,SOLVER_ROUTINES
+    TYPE(DistributedMatrixType), POINTER :: robinMatrix !<The R matrix that multiplies by h vector and adds to the RHS vector. Number of rows equals number of local dofs, and number of columns equals number of set point DOFs.
+    TYPE(DistributedVectorType), POINTER :: heatFlux !<The vector of values of q_h which is h*T_inf in Robin BCs. q=q_h-h*T.
+    TYPE(DistributedVectorType), POINTER :: convectionCoeff !<A vector with the convection heat transfer coefficient values. i.e. h values.
+    TYPE(DOMAIN_MAPPING_TYPE), POINTER :: pointDofMapping !<The domain mapping for DOFs with Neumann point conditions set.
+  END TYPE BoundaryConditionsRobinType
+
+  !>Contains information on the boundary conditions for the solver equations. \see OPENCMISS::CMISSBoundaryConditionsType
   TYPE BOUNDARY_CONDITIONS_TYPE
     TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: SOLVER_EQUATIONS !<A pointer to the solver equations.
     LOGICAL :: BOUNDARY_CONDITIONS_FINISHED !<Is .TRUE. if the boundary conditions for the equations set has finished being created, .FALSE. if not.
     INTEGER(INTG) :: NUMBER_OF_BOUNDARY_CONDITIONS_VARIABLES !<The number of boundary conditions variables
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_PTR_TYPE), ALLOCATABLE :: BOUNDARY_CONDITIONS_VARIABLES(:) !<BOUNDARY_CONDITIONS_VARIABLES(variable_idx). BOUNDARY_CONDITIONS_VARIABLES(variable_idx)%PTR is the pointer to the variable_idx'th boundary conditions variable. variable_idx ranges from 1 to NUMBER_OF_BOUNDARY_CONDITIONS_VARIABLES
     INTEGER(INTG) :: neumannMatrixSparsity !<The sparsity type of the Neumann integration matrices. \see SOLVER_ROUTINES_SparsityTypes,SOLVER_ROUTINES
+    TYPE(EquationsMatrixType), POINTER :: robinDynamicMatrix !<A pointer to the equations matrix.   !Elias
+    TYPE(EquationsMatrixType), POINTER :: robinVector !<A pointer to the equations matrix.   !Elias
+    TYPE(BoundaryConditionsValuesType), ALLOCATABLE :: boundaryConditionsValues(:)     !Elias
+    INTEGER(INTG), ALLOCATABLE :: rowBoundaryConditionsDofType(:) !Elias
+    TYPE(BoundaryConditionsDofTypes), POINTER :: dofTypes !Elias
+    TYPE(BoundaryConditionsRobinType), POINTER :: robinBoundaryConditions !Elias
   END TYPE BOUNDARY_CONDITIONS_TYPE
 
   !>A buffer type to allow for an array of pointers to a BOUNDARY_CONDITIONS_SPARSITY_INDICES_TYPE \see Types::BOUNDARY_CONDITIONS_SPARSITY_INDICES_TYPE
@@ -2045,7 +2103,7 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
 
   !>Contains information used to integrate Neumann boundary conditions
   TYPE BoundaryConditionsNeumannType
-    INTEGER(INTG), ALLOCATABLE :: setDofs(:) !<setDofs(neumann_idx): the global dof for the neumann_idx'th Neumann condition
+    INTEGER(INTG), ALLOCATABLE :: setDofs(:) !<setDofs(neumann_idx): the global dof for the neumann_idx'th Neumann condition.
     TYPE(DistributedMatrixType), POINTER :: integrationMatrix !<The N matrix that multiples the point values vector q to give the integrated values f. Number of rows equals number of local dofs, and number of columns equals number of set point DOFs.
     TYPE(DistributedVectorType), POINTER :: pointValues !<The vector of set point values q
     TYPE(DOMAIN_MAPPING_TYPE), POINTER :: pointDofMapping !<The domain mapping for DOFs with Neumann point conditions set.
@@ -3268,7 +3326,7 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
     LOGICAL :: HAVE_STATIC !<Is .TRUE. if there are any static equations in the map.
     TYPE(SOLVER_COL_TO_DYNAMIC_EQUATIONS_MAP_TYPE), ALLOCATABLE :: SOLVER_COL_TO_DYNAMIC_EQUATIONS_MAPS(:) !<SOLVER_COL_TO_DYNAMIC_EQUATIONS_MAPS(col_idx). The mappings from the col_idx'th column of the solver matrix to the dynamic equations in the equations set.
     TYPE(SOLVER_COL_TO_STATIC_EQUATIONS_MAP_TYPE), ALLOCATABLE :: SOLVER_COL_TO_STATIC_EQUATIONS_MAPS(:) !<SOLVER_COL_TO_STATIC_EQUATIONS_MAPS(col_idx). The mappings from the col_idx'th column of the solver matrix to the static equations in the equations set.
-  END TYPE SOLVER_COL_TO_EQUATIONS_SET_MAP_TYPE
+  END TYPE SOLVER_COL_TO_EQUATIONS_SET_MAP_TYPE 
   
   !>Contains information about the mapping from a solver matrix column to interface equations matrices and variables
   TYPE SOLVER_COL_TO_INTERFACE_EQUATIONS_MAP_TYPE

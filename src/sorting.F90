@@ -341,7 +341,7 @@ CONTAINS
     REAL(DP), INTENT(INOUT) :: a(:) !<a(index). On entry the unsorted list of numbers. On exit, the sorted list of numbers in ascending order. 
     INTEGER(INTG), INTENT(OUT) :: err !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
-    !Local variables
+    !Local variables.
     INTEGER(INTG) :: flag,i,j,k
     REAL(DP) :: VALUE
     

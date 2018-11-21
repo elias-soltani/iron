@@ -63,6 +63,7 @@ MODULE MESH_ROUTINES
 #endif
   USE NodeRoutines
   USE RegionAccessRoutines
+  USE Sorting
   USE Strings
   USE Trees
   USE Types
@@ -3117,7 +3118,8 @@ CONTAINS
     !Local Variables
     INTEGER(INTG) :: component_idx,ne,surrounding_element_idx,basis_local_face_idx,surrounding_element_basis_local_face_idx, &
       & element_local_node_idx,basis_local_face_node_idx,basis_local_face_derivative_idx,derivative_idx,version_idx,face_idx, &
-      & node_idx,elem_idx,NODES_IN_FACE(16),NUMBER_OF_FACES,MAX_NUMBER_OF_FACES,NEW_MAX_NUMBER_OF_FACES,FACE_NUMBER
+      & node_idx,elem_idx,NODES_IN_FACE(16),NUMBER_OF_FACES,MAX_NUMBER_OF_FACES,NEW_MAX_NUMBER_OF_FACES,FACE_NUMBER, &
+      & sortedNodesInFace(16),sortedTempFaces(16)
     INTEGER(INTG), ALLOCATABLE :: NODES_NUMBER_OF_FACES(:)
     INTEGER(INTG), POINTER :: TEMP_FACES(:,:),NEW_TEMP_FACES(:,:)
     LOGICAL :: FOUND
@@ -3196,6 +3198,11 @@ CONTAINS
                               NODES_IN_FACE(basis_local_face_node_idx)=DOMAIN_ELEMENT%ELEMENT_NODES( &
                                 & BASIS%NODE_NUMBERS_IN_LOCAL_FACE(basis_local_face_node_idx,basis_local_face_idx))
                             ENDDO !basis_local_face_node_idx
+                            sortedNodesInFace=0
+                            sortedNodesInFace(1:BASIS%NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx))= &
+                              & NODES_IN_FACE(1:BASIS%NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx))
+                            CALL Sorting_HeapSort(sortedNodesInFace(1:BASIS%NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx)), &
+                              & err,error,*999)
                             !Try and find a previously created face that matches in the adjacent elements
                             FOUND=.FALSE.
                             node_idx=NODES_IN_FACE(1)
@@ -3207,8 +3214,13 @@ CONTAINS
                                   DO surrounding_element_basis_local_face_idx=1,BASIS2%NUMBER_OF_LOCAL_FACES
                                     face_idx=DECOMPOSITION_ELEMENTS%ELEMENTS(surrounding_element_idx)%ELEMENT_FACES( &
                                       & surrounding_element_basis_local_face_idx)
-                                    IF(ALL(NODES_IN_FACE(1:BASIS%NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx))== &
-                                      & TEMP_FACES(1:BASIS%NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx),face_idx))) THEN
+                                    sortedTempFaces=0
+                                    sortedTempFaces(1:BASIS%NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx))= &
+                                      & TEMP_FACES(1:BASIS%NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx),face_idx)
+                                    CALL Sorting_HeapSort(sortedTempFaces(1:BASIS% &
+                                      & NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx)),err,error,*999)
+                                    IF(ALL(sortedNodesInFace(1:BASIS%NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx))== &
+                                      & sortedTempFaces(1:BASIS%NUMBER_OF_NODES_IN_LOCAL_FACE(basis_local_face_idx)))) THEN
                                       FOUND=.TRUE.
                                       EXIT
                                     ENDIF

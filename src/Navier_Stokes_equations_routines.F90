@@ -7010,7 +7010,7 @@ CONTAINS
       SOLVERS=>SOLVER%SOLVERS
       IF(ASSOCIATED(SOLVERS)) THEN
         CONTROL_LOOP=>SOLVERS%CONTROL_LOOP
-        CALL CONTROL_LOOP_TIMES_GET(CONTROL_LOOP,startTime,stopTime,currentTime,timeIncrement, &
+        CALL CONTROL_LOOP_TIMES_GET(CONTROL_LOOP,startTime,stopTime,CURRENT_TIME,timeIncrement, &
           & currentTimeLoopIteration,outputIterationNumber,ERR,ERROR,*999)
         IF(ASSOCIATED(CONTROL_LOOP%PROBLEM)) THEN
           IF(.NOT.ALLOCATED(CONTROL_LOOP%problem%specification)) THEN
@@ -7657,7 +7657,7 @@ CONTAINS
               SELECT CASE(SOLVER%SOLVE_TYPE)
                 ! --- D y n a m i c    S o l v e r s ---
               CASE(SOLVER_DYNAMIC_TYPE)
-                CALL CONTROL_LOOP_TIMES_GET(CONTROL_LOOP,startTime,stopTime,currentTime,timeIncrement,currentTimeLoopIteration, &
+                CALL CONTROL_LOOP_TIMES_GET(CONTROL_LOOP,startTime,stopTime,current_Time,timeIncrement,currentTimeLoopIteration, &
                   & outputIterationNumber,ERR,ERROR,*999)
                 SOLVER_EQUATIONS=>SOLVER%SOLVER_EQUATIONS
                 BOUNDARY_CONDITIONS=>SOLVER_EQUATIONS%BOUNDARY_CONDITIONS

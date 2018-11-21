@@ -2134,9 +2134,9 @@ CONTAINS
 
     IF(.NOT.ASSOCIATED(distributedMatrix)) CALL FlagError("Distributed mtrix is not associated.",err,error,*999)
     IF(distributedMatrix%matrixFinished) CALL FlagError("The distributed matrix has been finished.",err,error,*999)
-    IF(numberOfNonZeros<=0) THEN
+    IF(numberOfNonZeros<0) THEN
       localError="The specified number of non zeros of "//TRIM(NumberToVString(numberOfNonZeros,"*",err,error))// &
-        & " is invalid. The number must be > 0."
+        & " is invalid. The number must be >= 0."
       CALL FlagError(localError,err,error,*999)
     ENDIF
    

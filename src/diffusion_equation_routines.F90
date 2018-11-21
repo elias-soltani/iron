@@ -1592,9 +1592,11 @@ CONTAINS
                   CALL FIELD_VARIABLE_TYPES_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,[FIELD_U_VARIABLE_TYPE], &
                     & err,error,*999)
                   CALL FIELD_VARIABLE_LABEL_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
-                    & "Materials",err,error,*999)
+                    & "Materials",ERR,ERROR,*999)
                   CALL FIELD_DIMENSION_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                     & FIELD_VECTOR_DIMENSION_TYPE,err,error,*999)
+!                  CALL FIELD_DIMENSION_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
+!                    & FIELD_VECTOR_DIMENSION_TYPE,err,error,*999) !Elias
                   CALL FIELD_DATA_TYPE_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                     & FIELD_DP_TYPE,err,error,*999)
                   CALL Field_NumberOfComponentsGet(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
@@ -1604,6 +1606,9 @@ CONTAINS
                     & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_NO_SOURCE_ALE_DIFFUSION_SUBTYPE .OR. &
                     & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_CONSTANT_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
                     NUMBER_OF_MATERIALS_COMPONENTS=NUMBER_OF_DIMENSIONS
+!                    NUMBER_OF_MATERIALS_COMPONENTS=NUMBER_OF_DIMENSIONS+1         !Elias
+                    ! Materials field components are 1 for each dimension and 1 for the del u/del t coefficient
+                    !i.e., K and a in a(x)del u/del t=div(k.grad(u(x)))+b(x)
                   ELSEIF(EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_DIFFUSION_SUBTYPE .OR. &
                     & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
                     !Linear source. Materials field components are 1 for each dimension and 1 for the linear source
@@ -1619,13 +1624,27 @@ CONTAINS
                   DO component_idx=1,NUMBER_OF_DIMENSIONS
                     CALL FIELD_COMPONENT_MESH_COMPONENT_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
                       & component_idx,GEOMETRIC_MESH_COMPONENT,err,error,*999)
+!                    CALL FIELD_COMPONENT_INTERPOLATION_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
+!                      & component_idx,FIELD_CONSTANT_INTERPOLATION,err,error,*999)
                     CALL FIELD_COMPONENT_INTERPOLATION_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
-                      & component_idx,FIELD_CONSTANT_INTERPOLATION,err,error,*999)
+                      & component_idx,FIELD_ELEMENT_BASED_INTERPOLATION,ERR,ERROR,*999)       !Elias
                     CALL FIELD_COMPONENT_MESH_COMPONENT_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                       & component_idx,GEOMETRIC_MESH_COMPONENT,err,error,*999)
                   ENDDO !component_idx
                   !Default the source materials components to the first component geometric interpolation with constant
                   !interpolation
+!Elias
+                  IF(EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_CONSTANT_SOURCE_DIFFUSION_SUBTYPE) THEN
+                    CALL FIELD_COMPONENT_MESH_COMPONENT_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
+                      & 1,GEOMETRIC_MESH_COMPONENT,ERR,ERROR,*999)
+                    DO component_idx=NUMBER_OF_DIMENSIONS+1,NUMBER_OF_MATERIALS_COMPONENTS
+                      CALL FIELD_COMPONENT_MESH_COMPONENT_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
+                        & component_idx,GEOMETRIC_MESH_COMPONENT,ERR,ERROR,*999)
+                      CALL FIELD_COMPONENT_INTERPOLATION_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
+                        & component_idx,FIELD_ELEMENT_BASED_INTERPOLATION,ERR,ERROR,*999)
+                    ENDDO !components_idx
+                  ENDIF
+
                   IF(EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_DIFFUSION_SUBTYPE .OR. &
                     & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
                     CALL FIELD_COMPONENT_MESH_COMPONENT_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
@@ -1667,6 +1686,7 @@ CONTAINS
                   CALL Field_NumberOfComponentsGet(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
                     & NUMBER_OF_DIMENSIONS,err,error,*999)
                   NUMBER_OF_MATERIALS_COMPONENTS=NUMBER_OF_DIMENSIONS
+!                  NUMBER_OF_MATERIALS_COMPONENTS=NUMBER_OF_DIMENSIONS+1 !Elias
                   !Set the number of materials components
                   CALL FIELD_NUMBER_OF_COMPONENTS_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                     & NUMBER_OF_MATERIALS_COMPONENTS,err,error,*999)
@@ -1770,6 +1790,7 @@ CONTAINS
                   & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_NO_SOURCE_ALE_DIFFUSION_SUBTYPE .OR. &
                   & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_CONSTANT_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
                   NUMBER_OF_MATERIALS_COMPONENTS=NUMBER_OF_DIMENSIONS             
+!                  NUMBER_OF_MATERIALS_COMPONENTS=NUMBER_OF_DIMENSIONS+1  !Elias  
                 ELSE IF(EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_DIFFUSION_SUBTYPE .OR. &
                   & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
                   !Constant source. Materials field components are 1 for each dimension and 1 for the constant source
@@ -1792,6 +1813,7 @@ CONTAINS
                   ENDDO !component_idx
                 ENDIF
                 IF(EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_DIFFUSION_SUBTYPE .OR. &
+!                  & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_CONSTANT_SOURCE_DIFFUSION_SUBTYPE .OR. & !Elias
                   & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
                   !Now set the linear source values to 1.0
                   DO component_idx=NUMBER_OF_DIMENSIONS+1,NUMBER_OF_MATERIALS_COMPONENTS
@@ -1854,8 +1876,10 @@ CONTAINS
                       & component_idx,GEOMETRIC_MESH_COMPONENT,err,error,*999)
                     CALL FIELD_COMPONENT_MESH_COMPONENT_SET(EQUATIONS_SOURCE%SOURCE_FIELD,FIELD_U_VARIABLE_TYPE, &
                       & component_idx,GEOMETRIC_MESH_COMPONENT,err,error,*999)
+!                    CALL FIELD_COMPONENT_INTERPOLATION_SET(EQUATIONS_SOURCE%SOURCE_FIELD,FIELD_U_VARIABLE_TYPE, &
+!                      & component_idx,FIELD_NODE_BASED_INTERPOLATION,err,error,*999)
                     CALL FIELD_COMPONENT_INTERPOLATION_SET(EQUATIONS_SOURCE%SOURCE_FIELD,FIELD_U_VARIABLE_TYPE, &
-                      & component_idx,FIELD_NODE_BASED_INTERPOLATION,err,error,*999)
+                      & component_idx,FIELD_ELEMENT_BASED_INTERPOLATION,err,error,*999)   !Elias
                   ENDDO !component_idx
                 ENDIF
                 !Default the field scaling to that of the geometric field
@@ -3122,8 +3146,44 @@ CONTAINS
     updateMaterials = .FALSE.    
     updateBoundaryConditions = .TRUE.
 
-    IF(updateMaterials) THEN
-      !CALL DIFFUSION_EQUATION_PRE_SOLVE_UPDATE_MATERIALS_FIELD(controlLoop,solver,err,error,*999)
+
+    IF(ASSOCIATED(controlLoop)) THEN
+      IF(ASSOCIATED(SOLVER)) THEN
+        IF(ASSOCIATED(controlLoop%PROBLEM)) THEN
+          IF(.NOT.ALLOCATED(controlLoop%PROBLEM%SPECIFICATION)) THEN
+            CALL FlagError("Problem specification is not allocated.",err,error,*999)
+          ELSE IF(SIZE(controlLoop%PROBLEM%SPECIFICATION,1)<3) THEN
+            CALL FlagError("Problem specification must have three entries for a Diffusion problem.",err,error,*999)
+          END IF
+          SELECT CASE(controlLoop%PROBLEM%SPECIFICATION(3))
+          CASE(PROBLEM_NO_SOURCE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_DIFFUSION_SUBTYPE, &
+            & PROBLEM_NONLINEAR_SOURCE_DIFFUSION_SUBTYPE)
+            ! do nothing ???
+!            CALL Diffusion_PreSolveUpdateAnalyticValues(controlLoop,SOLVER,err,error,*999)
+          CASE(PROBLEM_NO_SOURCE_ALE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE, &
+            & PROBLEM_NONLINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE)
+            CALL WRITE_STRING(GENERAL_OUTPUT_TYPE,"ALE diffusion pre solve... ",err,error,*999)
+            IF(SOLVER%DYNAMIC_SOLVER%ALE) THEN
+              !First update mesh and calculate boundary velocity values
+              CALL Diffusion_PreSolveALEUpdateMesh(controlLoop,SOLVER,err,error,*999)
+              !Then apply both normal and moving mesh boundary conditions
+              !CALL DIFFUSION_PRE_SOLVE_UPDATE_BOUNDARY_CONDITIONS(controlLoop,SOLVER,err,error,*999)
+            ELSE  
+              CALL FlagError("Mesh motion calculation not successful for ALE problem.",err,error,*999)
+            END IF
+          CASE DEFAULT
+            localError="Problem subtype "//TRIM(NUMBER_TO_VSTRING(controlLoop%PROBLEM%SPECIFICATION(3),"*",err,error))// &
+              & " is not valid for a diffusion equation type of a classical field problem class."
+            CALL FlagError(localError,err,error,*999)
+          END SELECT
+        ELSE
+          CALL FlagError("Problem is not associated.",err,error,*999)
+        ENDIF
+      ELSE
+        CALL FlagError("Solver is not associated.",err,error,*999)
+      ENDIF
+    ELSE
+      CALL FlagError("Control loop is not associated.",err,error,*999)
     ENDIF
     
     !IF(updateBoundaryConditions) THEN
@@ -4192,28 +4252,34 @@ CONTAINS
 
     ENTERS("Diffusion_PostSolve",err,error,*999)
     
-    IF(.NOT.ASSOCIATED(solver)) CALL FlagError("Solver is not associated.",err,error,*999)
-    NULLIFY(controlLoop)
-    CALL Solver_ControlLoopGet(solver,controlLoop,err,error,*999)
-    NULLIFY(problem)
-    CALL ControlLoop_ProblemGet(controlLoop,problem,err,error,*999)
-    IF(.NOT.ALLOCATED(problem%specification)) CALL FlagError("Problem specification is not allocated.",err,error,*999)
-    IF(SIZE(problem%specification,1)<3) &
-      & CALL FlagError("Problem specification must have at least three entries for a diffusion problem.",err,error,*999)
-    
-    SELECT CASE(problem%specification(3))
-    CASE(PROBLEM_NO_SOURCE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_DIFFUSION_SUBTYPE, &
-      & PROBLEM_NO_SOURCE_ALE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE)
-      !CALL Diffusion_PostSolveOuputData(controlLoop,solver,err,error,*999)
-    CASE(PROBLEM_NONLINEAR_SOURCE_DIFFUSION_SUBTYPE)
-      ! do nothing ???
-    CASE(PROBLEM_NONLINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE)
-      CALL FlagError("Not implemented.",err,error,*999)
-    CASE DEFAULT
-      localError="Problem subtype "//TRIM(NumberToVString(problem%specification(3),"*",err,error))// &
-        & " is not valid for a diffusion type of a classical field problem class."
-      CALL FlagError(localError,err,error,*999)
-    END SELECT
+    IF(ASSOCIATED(SOLVER)) THEN
+       NULLIFY(controlLoop)
+       CALL Solver_ControlLoopGet(solver,controlLoop,err,error,*999)
+       IF(ASSOCIATED(controlLoop%PROBLEM)) THEN 
+          IF(.NOT.ALLOCATED(controlLoop%PROBLEM%SPECIFICATION)) THEN
+             CALL FlagError("Problem specification is not allocated.",err,error,*999)
+          ELSE IF(SIZE(controlLoop%PROBLEM%SPECIFICATION,1)<3) THEN
+             CALL FlagError("Problem specification must have three entries for a Diffusion problem.",err,error,*999)
+          END IF
+          SELECT CASE(controlLoop%PROBLEM%SPECIFICATION(3))
+          CASE(PROBLEM_NO_SOURCE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_DIFFUSION_SUBTYPE, &
+               & PROBLEM_NO_SOURCE_ALE_DIFFUSION_SUBTYPE,PROBLEM_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE)
+             CALL DIFFUSION_EQUATION_POST_SOLVE_OUTPUT_DATA(controlLoop,SOLVER,err,error,*999)
+          CASE(PROBLEM_NONLINEAR_SOURCE_DIFFUSION_SUBTYPE)
+             ! do nothing ???
+          CASE(PROBLEM_NONLINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE)
+             CALL FlagError("Not implemented.",err,error,*999)
+          CASE DEFAULT
+             localError="Problem subtype "//TRIM(NUMBER_TO_VSTRING(controlLoop%PROBLEM%SPECIFICATION(3),"*",err,error))// &
+                  & " is not valid for a diffusion type of a classical field problem class."
+             CALL FlagError(localError,err,error,*999)
+          END SELECT
+       ELSE
+          CALL FlagError("Problem is not associated.",err,error,*999)
+       ENDIF
+    ELSE
+       CALL FlagError("Solver is not associated.",err,error,*999)
+    ENDIF
 
     EXITS("Diffusion_PostSolve")
     RETURN
@@ -4233,18 +4299,42 @@ CONTAINS
     TYPE(CONTROL_LOOP_TYPE), POINTER :: CONTROL_LOOP !<A pointer to the control loop to solve.
     TYPE(SOLVER_TYPE), POINTER :: SOLVER !<A pointer to the solver
     INTEGER(INTG), INTENT(OUT) :: err !<The error code
-    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string.
     !Local Variables
+    TYPE(REGION_TYPE), POINTER :: DEPENDENT_REGION 
     TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: SOLVER_EQUATIONS  !<A pointer to the solver equations
     TYPE(SOLVER_MAPPING_TYPE), POINTER :: SOLVER_MAPPING !<A pointer to the solver mapping
     TYPE(EQUATIONS_SET_TYPE), POINTER :: EQUATIONS_SET !<A pointer to the equations set
-    TYPE(VARYING_STRING) :: localError
+    TYPE(VARYING_STRING) :: localError, METHOD, FILENAME
 
     REAL(DP) :: CURRENT_TIME,TIME_INCREMENT
     INTEGER(INTG) :: EQUATIONS_SET_IDX,CURRENT_LOOP_ITERATION,OUTPUT_ITERATION_NUMBER
 
+    LOGICAL :: EXPORT_FIELD
     CHARACTER(14) :: FILE
     CHARACTER(14) :: OUTPUT_FILE
+
+    REAL(DP) :: start,finish,stopTime
+    INTEGER:: cr,c1,c2,n,stopIteration
+    CHARACTER(10)::c1f
+    REAL::t1,t2,rate
+    CHARACTER(4)::EN
+    CHARACTER(10)::GRGR,KW,GB,YR
+    CHARACTER(7)::BL,YE,WH,STR1,STR2
+    CHARACTER(15)::STR3
+    CHARACTER(50)::BAR
+    ! Elias. Color codes
+    GRGR=char(27)//'[1;32;40m'
+    KW=char(27)//'[1;30;47m'
+    GB=char(27)//'[1;32;44m'
+    YR=char(27)//'[1;33;41m'
+    BL=char(27)//'[1;34m'
+    YE=char(27)//'[1;33m'
+    WH=char(27)//'[1;37m'
+    EN=char(27)//'[0m'
+    BAR='                                       '
+    n=0
+
 
     ENTERS("DIFFUSION_EQUATION_POST_SOLVE_OUTPUT_DATA",err,error,*999)
 
@@ -4270,7 +4360,7 @@ CONTAINS
                     EQUATIONS_SET=>SOLVER_MAPPING%EQUATIONS_SETS(equations_set_idx)%ptr
 
                     CURRENT_LOOP_ITERATION=CONTROL_LOOP%TIME_LOOP%ITERATION_NUMBER
-                    OUTPUT_ITERATION_NUMBER=CONTROL_LOOP%TIME_LOOP%OUTPUT_NUMBER
+                    OUTPUT_ITERATION_NUMBER=CONTROL_LOOP%TIME_LOOP%OUTPUT_NUMBER !FREQUENCY
 
                     IF(OUTPUT_ITERATION_NUMBER/=0) THEN
                       IF(CONTROL_LOOP%TIME_LOOP%CURRENT_TIME<=CONTROL_LOOP%TIME_LOOP%STOP_TIME) THEN
@@ -4283,29 +4373,57 @@ CONTAINS
                         ELSE IF(CURRENT_LOOP_ITERATION<10000) THEN
                           WRITE(OUTPUT_FILE,'("TIME_STEP_",I0)') CURRENT_LOOP_ITERATION
                         END IF
+                        DEPENDENT_REGION=>EQUATIONS_SET%REGION
                         FILE=OUTPUT_FILE
   !          FILE="TRANSIENT_OUTPUT"
 !!!!!!!!ADAPT THIS TO WORK WITH DIFFUSION AND NOT JUST FLUID MECHANICS
-!                         METHOD="FORTRAN"
-!                         EXPORT_FIELD=.TRUE.
-!                         IF(EXPORT_FIELD) THEN          
-!                           IF(MOD(CURRENT_LOOP_ITERATION,OUTPUT_ITERATION_NUMBER)==0)  THEN   
-!                             CALL WriteString(GENERAL_OUTPUT_TYPE,"...",err,error,*999)
-!                             CALL WriteString(GENERAL_OUTPUT_TYPE,"Now export fields... ",err,error,*999)
+                         METHOD="FORTRAN"
+                         FILENAME = "./output/"//"MainTime_"//TRIM(NUMBER_TO_VSTRING(CURRENT_LOOP_ITERATION,"*",ERR,ERROR))
+                         EXPORT_FIELD=.TRUE.
+                         IF(EXPORT_FIELD) THEN          
+                           IF(MOD(CURRENT_LOOP_ITERATION,OUTPUT_ITERATION_NUMBER)==0)  THEN   
+                             CALL WRITE_STRING(GENERAL_OUTPUT_TYPE,"...",err,error,*999)
+                             CALL WRITE_STRING(GENERAL_OUTPUT_TYPE,"Now export fields... ",err,error,*999)
 !                             CALL FLUID_MECHANICS_IO_WRITE_CMGUI(EQUATIONS_SET%REGION,EQUATIONS_SET%GLOBAL_NUMBER,FILE, &
 !                               & err,error,*999)
-!                             CALL WriteString(GENERAL_OUTPUT_TYPE,OUTPUT_FILE,err,error,*999)
-!                             CALL WriteString(GENERAL_OUTPUT_TYPE,"...",err,error,*999)
-!                           ENDIF
-!                         ENDIF 
+                             CALL FIELD_IO_NODES_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
+!                             CALL FIELD_IO_ELEMENTS_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
+                             CALL WRITE_STRING(GENERAL_OUTPUT_TYPE,OUTPUT_FILE,err,error,*999)
+                             CALL WRITE_STRING(GENERAL_OUTPUT_TYPE,"...",err,error,*999)
 
-                        IF(ASSOCIATED(EQUATIONS_SET%ANALYTIC)) THEN
-                          IF(EQUATIONS_SET%ANALYTIC%ANALYTIC_FUNCTION_TYPE==EQUATIONS_SET_DIFFUSION_EQUATION_TWO_DIM_1 .OR. &
-                            & EQUATIONS_SET%ANALYTIC%ANALYTIC_FUNCTION_TYPE== &
-                            & EQUATIONS_SET_LINEAR_SOURCE_DIFFUSION_EQUATION_THREE_DIM_1) THEN
-                            CALL AnalyticAnalysis_Output(EQUATIONS_SET%DEPENDENT%DEPENDENT_FIELD,FILE,err,error,*999)
-                          ENDIF
-                        ENDIF
+                             ! Output iteration information. Elias  
+                             CALL cpu_time(start)
+                             WRITE(STR1,'(f4.2)') TIME_INCREMENT
+                             WRITE(STR2,'(f6.1)') start   
+                             stopTime=CONTROL_LOOP%TIME_LOOP%STOP_TIME
+                             stopIteration=(stopTime/TIME_INCREMENT)
+                             n=REAL(CURRENT_LOOP_ITERATION)/stopIteration*50
+                             WRITE(STR3,*) CURRENT_LOOP_ITERATION 
+                             CALL system_clock(count_rate=cr)
+                             rate = REAL(cr)
+                             CALL system_clock (c1)
+                             WRITE(c1f,'(f10.2)')c1/rate
+
+                             WRITE(*,'(a41,a29,a33,a38)')GRGR//"   time step(sec)   "//EN,&
+                             & GB//"   cpu_time   "//EN,KW//"   # time steps   "//EN,&
+                             & YR//"   Elapsed Time(sec)   "//EN
+                             WRITE(*,'(a32,a31,a29,a34)')GRGR//STR1//EN,&
+                             & BL//STR2//EN,YE//STR3//EN,&
+                             & WH//c1f//EN
+                             print*,' '
+                             WRITE(*,'(a20,a60,a13)')char(27)//'[1;;41m'//' '//EN,char(27)//'[;47m'//BAR(1:n)//EN//BAR(n+1:50),&
+                               & char(27)//'[1;;41m'//' '//EN
+
+                           ENDIF
+                         ENDIF 
+
+!                        IF(ASSOCIATED(EQUATIONS_SET%ANALYTIC)) THEN
+!                          IF(EQUATIONS_SET%ANALYTIC%ANALYTIC_FUNCTION_TYPE==EQUATIONS_SET_DIFFUSION_EQUATION_TWO_DIM_1 .OR. &
+!                            & EQUATIONS_SET%ANALYTIC%ANALYTIC_FUNCTION_TYPE== &
+!                           & EQUATIONS_SET_LINEAR_SOURCE_DIFFUSION_EQUATION_THREE_DIM_1) THEN
+!                            CALL AnalyticAnalysis_Output(EQUATIONS_SET%DEPENDENT%DEPENDENT_FIELD,FILE,ERR,ERROR,*999)
+!                          ENDIF
+!                        ENDIF
                       ENDIF 
                     ENDIF
                   ENDDO
@@ -4517,9 +4635,15 @@ CONTAINS
                         ENDIF
                       ENDIF
                       IF(dampingMatrix%updateMatrix) THEN
+!                        a_param=EQUATIONS%INTERPOLATION%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%PTR% &
+!                            & VALUES(GEOMETRIC_VARIABLE%NUMBER_OF_COMPONENTS+1,NO_PART_DERIV) !Elias
+                        a_param = 1 !Elias
                         dampingMatrix%elementMatrix%matrix(mhs,nhs)=dampingMatrix%elementMatrix%matrix(mhs,nhs)+ &
-                          & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)* &
-                          & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ns,NO_PART_DERIV,ng)*RWG
+                          & a_param*QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)* &
+                          & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ns,NO_PART_DERIV,ng)*RWG !Elias
+!                        DAMPING_MATRIX%ELEMENT_MATRIX%MATRIX(mhs,nhs)=DAMPING_MATRIX%ELEMENT_MATRIX%MATRIX(mhs,nhs)+ &
+!                          & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)* &
+!                          & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ns,NO_PART_DERIV,ng)*RWG 
                       ENDIF
                     ENDDO !ns
                   ENDDO !nh

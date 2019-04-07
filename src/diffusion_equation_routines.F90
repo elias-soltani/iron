@@ -1613,7 +1613,7 @@ CONTAINS
                     & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
                     !Linear source. Materials field components are 1 for each dimension and 1 for the linear source
                     !i.e., k and a in div(k.grad(u(x)))=a(x)u(x)+c(x)
-                    NUMBER_OF_MATERIALS_COMPONENTS=NUMBER_OF_DIMENSIONS+1
+                    NUMBER_OF_MATERIALS_COMPONENTS=NUMBER_OF_DIMENSIONS+1 !Elias Sigma and c in dT/dt-div(Sigma gradT)-(b-cT)=0
                   ELSE
                     NUMBER_OF_MATERIALS_COMPONENTS=NUMBER_OF_DIMENSIONS+2
                   ENDIF
@@ -1653,7 +1653,7 @@ CONTAINS
                       CALL FIELD_COMPONENT_MESH_COMPONENT_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                         & component_idx,GEOMETRIC_MESH_COMPONENT,err,error,*999)
                       CALL FIELD_COMPONENT_INTERPOLATION_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
-                        & component_idx,FIELD_CONSTANT_INTERPOLATION,err,error,*999)
+                        & component_idx,FIELD_ELEMENT_BASED_INTERPOLATION,err,error,*999)
                     ENDDO !components_idx
                   ENDIF
                   !Default the field scaling to that of the geometric field
@@ -4017,8 +4017,8 @@ CONTAINS
             CASE(PROBLEM_COUPLED_SOURCE_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
               IF(SOLVER%GLOBAL_NUMBER==2) THEN
                 !--- Get the dependent field of the diffusion equations
-                CALL WriteString(GENERAL_OUTPUT_TYPE,"Store value of diffusion solution &
-                   & (dependent field - V variable_type) at time, t ... ",err,error,*999)
+!                CALL WriteString(GENERAL_OUTPUT_TYPE,"Store value of diffusion solution &
+!                   & (dependent field - V variable_type) at time, t ... ",err,error,*999)
                 CALL SOLVERS_SOLVER_GET(SOLVER%SOLVERS,2,SOLVER_DIFFUSION_ONE,err,error,*999)
                 SOLVER_EQUATIONS_DIFFUSION_ONE=>SOLVER_DIFFUSION_ONE%SOLVER_EQUATIONS
                 IF(ASSOCIATED(SOLVER_EQUATIONS_DIFFUSION_ONE)) THEN
@@ -4466,7 +4466,7 @@ CONTAINS
     !Local Variables
     INTEGER(INTG) FIELD_VAR_TYPE,mh,mhs,ms,ng,nh,nhs,ni,nj,ns,my_compartment,Ncompartments,imatrix,num_var_count
     INTEGER(INTG) :: MESH_COMPONENT_1, MESH_COMPONENT_2
-    REAL(DP) :: C_PARAM,K_PARAM,RWG,SUM,PGMJ(3),PGNJ(3),A_PARAM,COUPLING_PARAM,PGM,PGN
+    REAL(DP) :: B_PARAM,K_PARAM,RWG,SUM,PGMJ(3),PGNJ(3),C_PARAM,COUPLING_PARAM,PGM,PGN,a_param
     TYPE(BASIS_TYPE), POINTER :: DEPENDENT_BASIS,GEOMETRIC_BASIS
     TYPE(BASIS_TYPE), POINTER :: DEPENDENT_BASIS_1, DEPENDENT_BASIS_2
     TYPE(EquationsType), POINTER :: equations
@@ -4615,8 +4615,8 @@ CONTAINS
                               & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ns,PARTIAL_DERIVATIVE_FIRST_DERIVATIVE_MAP(ni),ng)* &
                               & equations%interpolation%geometricInterpPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%DXI_DX(ni,nj)
                           ENDDO !ni
-                          K_PARAM=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr% &
-                            & VALUES(nj,NO_PART_DERIV)
+                          K_PARAM=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr% & 
+                            & VALUES(nj,NO_PART_DERIV) !Elias Sigma (diffusivity) term component in dT/dt-div(Sigma*gradT)-(b-cT)=0
                           SUM=SUM+K_PARAM*PGMJ(nj)*PGNJ(nj)
                         ENDDO !nj
                         IF(EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_NO_SOURCE_DIFFUSION_SUBTYPE .OR. &
@@ -4627,10 +4627,12 @@ CONTAINS
                           stiffnessMatrix%elementMatrix%matrix(mhs,nhs)=stiffnessMatrix%elementMatrix%matrix(mhs,nhs)+SUM*RWG
                         ELSEIF(EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_DIFFUSION_SUBTYPE .OR. &
                           & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
-                          A_PARAM=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr% &
-                            & VALUES(GEOMETRIC_VARIABLE%NUMBER_OF_COMPONENTS,NO_PART_DERIV)
-                          stiffnessMatrix%elementMatrix%matrix(mhs,nhs)=stiffnessMatrix%elementMatrix%matrix(mhs,nhs)+SUM*RWG- &
-                            & A_PARAM*QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)* &
+!                          A_PARAM=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr% &
+!                            & VALUES(GEOMETRIC_VARIABLE%NUMBER_OF_COMPONENTS,NO_PART_DERIV)  !
+                          C_PARAM=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr% &
+                            & VALUES(GEOMETRIC_VARIABLE%NUMBER_OF_COMPONENTS+1,NO_PART_DERIV) !Elias source term dynamic component = c in dT/dt-div(Sigma*gradT)-(b-cT)=0
+                          stiffnessMatrix%elementMatrix%matrix(mhs,nhs)=stiffnessMatrix%elementMatrix%matrix(mhs,nhs)+SUM*RWG+ &
+                            & C_PARAM*QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)* &
                             & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ns,NO_PART_DERIV,ng)*RWG
                         ENDIF
                       ENDIF
@@ -4656,14 +4658,14 @@ CONTAINS
               & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_CONSTANT_SOURCE_ALE_DIFFUSION_SUBTYPE .OR. &
               & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
               IF(sourceVector%updateVector) THEN
-                C_PARAM=equations%interpolation%sourceInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1, NO_PART_DERIV)
+                B_PARAM=equations%interpolation%sourceInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1, NO_PART_DERIV) ! source term component = b in dT/dt-div(Sigma*gradT)-(b-cT)=0
                 mhs=0
                 DO mh=1,FIELD_VARIABLE%NUMBER_OF_COMPONENTS
                   !Loop over element rows
                   DO ms=1,DEPENDENT_BASIS%NUMBER_OF_ELEMENT_PARAMETERS
                     mhs=mhs+1
                     sourceVector%elementVector%vector(mhs)=sourceVector%elementVector%vector(mhs)+ &
-                      & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)*C_PARAM*RWG
+                      & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)*B_PARAM*RWG
                   ENDDO !ms
                 ENDDO !mh
               ENDIF

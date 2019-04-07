@@ -366,7 +366,6 @@ CONTAINS
                         & SEND_COUNT,MPI_INTEGER,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
                       CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
                     ENDIF !mpi_in_place bug workaround - only do this when num comp nodes > 1
-
                   ELSE
                     LOCAL_ERROR="Field variable domain mapping is not associated for variable type "// &
                       & TRIM(NUMBER_TO_VSTRING(variable_idx,"*",ERR,ERROR))//"."
@@ -5548,8 +5547,8 @@ CONTAINS
                   DO nodeIdxn=1,basis%NUMBER_OF_NODES
                     nodeNumber=line%NODES_IN_LINE(nodeIdxn)
                     DO derivIdxn=1,basis%NUMBER_OF_DERIVATIVES(nodeIdxn)
-                      derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdxn,nodeIdxn)
-                      versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdxn,nodeIdxn)
+                      derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdxn,nodeIdxn)
+                      versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdxn,nodeIdxn)
                       localDofN=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
                         & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
                       globalDofN=rhsVariable%DOMAIN_MAPPING%local_to_global_map(localDofN)

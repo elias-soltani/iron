@@ -193,6 +193,8 @@ CONTAINS
             CALL DIFFUSION_EQUATION_CONTROL_LOOP_POST_LOOP(CONTROL_LOOP,err,error,*999)
           CASE(PROBLEM_REACTION_DIFFUSION_EQUATION_TYPE)
             CALL REACTION_DIFFUSION_CONTROL_LOOP_POST_LOOP(CONTROL_LOOP,err,error,*999)
+          CASE(PROBLEM_ADVECTION_DIFFUSION_EQUATION_TYPE)
+            !Do nothing
           CASE DEFAULT
             localError="The second problem specification of "// &
               & TRIM(NumberToVString(PROBLEM%specification(2),"*",err,error))// &
@@ -865,7 +867,7 @@ CONTAINS
     CASE(PROBLEM_DIFFUSION_EQUATION_TYPE)
       CALL Diffusion_PostSolve(solver,err,error,*999)
     CASE(PROBLEM_ADVECTION_EQUATION_TYPE)
-      !CALL Advection_PostSolve(solver,err,error,*999)
+      CALL Advection_PostSolve(solver,err,error,*999)
     CASE(PROBLEM_ADVECTION_DIFFUSION_EQUATION_TYPE)
       CALL AdvectionDiffusion_PostSolve(solver,err,error,*999)
     CASE(PROBLEM_REACTION_DIFFUSION_EQUATION_TYPE)

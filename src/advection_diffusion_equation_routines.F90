@@ -60,6 +60,7 @@ MODULE ADVECTION_DIFFUSION_EQUATION_ROUTINES
   USE EquationsMatricesRoutines
   USE EquationsSetConstants
   USE EquationsSetAccessRoutines
+  USE FIELD_IO_ROUTINES
   USE FIELD_ROUTINES
   USE FieldAccessRoutines
   USE INPUT_OUTPUT
@@ -3412,7 +3413,7 @@ CONTAINS
       & problemSubType==PROBLEM_LINEAR_SOURCE_ADVECTION_DIFFUSION_SUBTYPE) THEN
        CALL WriteString(GENERAL_OUTPUT_TYPE,"Read in vector data... ",err,error,*999)
        !Update independent data fields
-       CALL AdvectionDiffusion_PreSolveUpdateInputData(controlLoop,solver,err,error,*999)
+!       CALL AdvectionDiffusion_PreSolveUpdateInputData(controlLoop,solver,err,error,*999)
        !CALL ADVECTION_DIFFUSION_PRE_SOLVE_UPDATE_BC(controlLoop,solver,err,error,*999)
      ELSE IF(problemSubType==PROBLEM_NO_SOURCE_ALE_ADVECTION_DIFFUSION_SUBTYPE .OR. &
        & problemSubType==PROBLEM_LINEAR_SOURCE_ALE_ADVECTION_DIFFUSION_SUBTYPE) THEN
@@ -3664,8 +3665,8 @@ CONTAINS
             CASE(PROBLEM_COUPLED_SOURCE_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
               IF(SOLVER%GLOBAL_NUMBER==1) THEN
                 !--- Get the dependent field of the advection-diffusion equations
-                CALL WriteString(GENERAL_OUTPUT_TYPE,"Store value of advection-diffusion & 
-                  & (dependent field - U variable_type) at time, t ... ",err,error,*999)
+!                CALL WriteString(GENERAL_OUTPUT_TYPE,"Store value of advection-diffusion & 
+!                  & (dependent field - U variable_type) at time, t ... ",err,error,*999)
                 CALL SOLVERS_SOLVER_GET(SOLVER%SOLVERS,1,SOLVER_ADVECTION_DIFFUSION,err,error,*999)
                 SOLVER_EQUATIONS_ADVECTION_DIFFUSION=>SOLVER_ADVECTION_DIFFUSION%SOLVER_EQUATIONS
                 IF(ASSOCIATED(SOLVER_EQUATIONS_ADVECTION_DIFFUSION)) THEN
@@ -4166,16 +4167,39 @@ CONTAINS
     INTEGER(INTG), INTENT(OUT) :: err !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
     !Local variables
+    TYPE(REGION_TYPE), POINTER :: DEPENDENT_REGION 
     TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: SOLVER_EQUATIONS  !<A pointer to the solver equations
     TYPE(SOLVER_MAPPING_TYPE), POINTER :: SOLVER_MAPPING !<A pointer to the solver mapping
     TYPE(EQUATIONS_SET_TYPE), POINTER :: EQUATIONS_SET !<A pointer to the equations set
-    TYPE(VARYING_STRING) :: localError
+    TYPE(VARYING_STRING) :: localError, METHOD, FILENAME
 
     REAL(DP) :: CURRENT_TIME,TIME_INCREMENT
     INTEGER(INTG) :: EQUATIONS_SET_IDX,CURRENT_LOOP_ITERATION,OUTPUT_ITERATION_NUMBER
 
+    LOGICAL :: EXPORT_FIELD
     CHARACTER(14) :: FILE
     CHARACTER(14) :: OUTPUT_FILE
+
+!    REAL(DP) :: start,finish,stopTime
+!    INTEGER:: cr,c1,c2,n,stopIteration
+!    CHARACTER(10)::c1f
+!    REAL::t1,t2,rate
+!    CHARACTER(4)::EN
+!    CHARACTER(10)::GRGR,KW,GB,YR
+!    CHARACTER(7)::BL,YE,WH,STR1,STR2
+!    CHARACTER(15)::STR3
+!    CHARACTER(50)::BAR
+!    ! Elias. Color codes
+!    GRGR=char(27)//'[1;32;40m'
+!    KW=char(27)//'[1;30;47m'
+!    GB=char(27)//'[1;32;44m'
+!    YR=char(27)//'[1;33;41m'
+!    BL=char(27)//'[1;34m'
+!    YE=char(27)//'[1;33m'
+!    WH=char(27)//'[1;37m'
+!    EN=char(27)//'[0m'
+!    BAR='                                       '
+!    n=0
 
     ENTERS("ADVECTION_DIFFUSION_POST_SOLVE_OUTPUT_DATA",err,error,*999)
 
@@ -4212,20 +4236,25 @@ CONTAINS
                         ELSE IF(CURRENT_LOOP_ITERATION<10000) THEN
                           WRITE(OUTPUT_FILE,'("TIME_STEP_",I0)') CURRENT_LOOP_ITERATION
                         END IF
+                        DEPENDENT_REGION=>EQUATIONS_SET%REGION
                         FILE=OUTPUT_FILE
+
 !                        FILE="TRANSIENT_OUTPUT"
-!                         METHOD="FORTRAN"
-!                         EXPORT_FIELD=.TRUE.
-!                         IF(EXPORT_FIELD) THEN          
-!                          IF(MOD(CURRENT_LOOP_ITERATION,OUTPUT_ITERATION_NUMBER)==0)  THEN   
+                        METHOD="FORTRAN"
+                        FILENAME = "./output/"//"MainTime_"//TRIM(NUMBER_TO_VSTRING(CURRENT_LOOP_ITERATION,"*",ERR,ERROR))
+                        EXPORT_FIELD=.TRUE.
+                        IF(EXPORT_FIELD) THEN          
+                          IF(MOD(CURRENT_LOOP_ITERATION,OUTPUT_ITERATION_NUMBER)==0)  THEN   
                             CALL WriteString(GENERAL_OUTPUT_TYPE,"...",err,error,*999)
                             CALL WriteString(GENERAL_OUTPUT_TYPE,"Now export fields... ",err,error,*999)
-                          CALL FLUID_MECHANICS_IO_WRITE_CMGUI(EQUATIONS_SET%REGION,EQUATIONS_SET%GLOBAL_NUMBER,FILE, &
-                              & err,error,*999)
+!                          CALL FLUID_MECHANICS_IO_WRITE_CMGUI(EQUATIONS_SET%REGION,EQUATIONS_SET%GLOBAL_NUMBER,FILE, &
+!                              & err,error,*999)
+                            CALL FIELD_IO_NODES_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
+                            CALL FIELD_IO_ELEMENTS_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
                             CALL WriteString(GENERAL_OUTPUT_TYPE,OUTPUT_FILE,err,error,*999)
                             CALL WriteString(GENERAL_OUTPUT_TYPE,"...",err,error,*999)
-!                           ENDIF
-!                         ENDIF 
+                          ENDIF
+                        ENDIF 
                       ENDIF 
                     ENDIF
                   ENDDO

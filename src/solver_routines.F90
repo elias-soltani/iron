@@ -5629,14 +5629,14 @@ CONTAINS
                         CALL Field_ParameterSetEnsureCreated(DEPENDENT_FIELD,VariableType, &
                           & FIELD_MEAN_PREDICTED_DISPLACEMENT_SET_TYPE,ERR,ERROR,*999)
                         
-                        CALL Field_ParameterSetEnsureCreated(DEPENDENT_FIELD,VariableType, &
-                          & FIELD_INCREMENTAL_VALUES_SET_TYPE,ERR,ERROR,*999)
+!                        CALL Field_ParameterSetEnsureCreated(DEPENDENT_FIELD,VariableType, &
+!                          & FIELD_INCREMENTAL_VALUES_SET_TYPE,ERR,ERROR,*999)
                         CALL Field_ParameterSetEnsureCreated(DEPENDENT_FIELD,VariableType, &
                           & FIELD_PREDICTED_DISPLACEMENT_SET_TYPE,ERR,ERROR,*999)
-                        CALL Field_ParameterSetEnsureCreated(DEPENDENT_FIELD,VariableType, &
-                          & FIELD_RESIDUAL_SET_TYPE,ERR,ERROR,*999)
-                        CALL Field_ParameterSetEnsureCreated(DEPENDENT_FIELD,VariableType, &
-                          & FIELD_PREVIOUS_RESIDUAL_SET_TYPE,ERR,ERROR,*999)
+!                        CALL Field_ParameterSetEnsureCreated(DEPENDENT_FIELD,VariableType, &
+!                          & FIELD_RESIDUAL_SET_TYPE,ERR,ERROR,*999)
+!                        CALL Field_ParameterSetEnsureCreated(DEPENDENT_FIELD,VariableType, &
+!                          & FIELD_PREVIOUS_RESIDUAL_SET_TYPE,ERR,ERROR,*999)
                         
                         
                         !Check if there are any linear mappings
@@ -13153,7 +13153,7 @@ CALL DistributedVector_DataGet(rhsVector,RHS_DATA,ERR,ERROR,*999)
                                                   & ERR,ERROR,*999)
                                               ENDDO !solver_row_idx
                                               !Note: the Dirichlet boundary conditions are implicitly included by doing a matrix
-                                              !vector product above with the dynamic stiffness matrix and the mean predicited
+                                              !vector product above with the dynamic stiffness matrix and the mean predicted
                                               !displacement vector
                                               !
                                               !This is only true for nonlinear cases and linear cases with fixed values at the boundaries
@@ -14095,7 +14095,7 @@ CALL DistributedVector_DataGet(rhsVector,RHS_DATA,ERR,ERROR,*999)
     REAL(DP) :: DEPENDENT_VALUE,LINEAR_VALUE,LINEAR_VALUE_SUM,MATRIX_VALUE,RESIDUAL_VALUE,RHS_VALUE,row_coupling_coefficient, &
       & SOURCE_VALUE,VALUE,RHS_INTEGRATED_VALUE
     REAL(DP), POINTER :: RHS_PARAMETERS(:),CHECK_DATA(:),CHECK_DATA2(:),CHECK_DATA3(:),CHECK_DATA4(:)
-    LOGICAL :: SUBTRACT_FIXED_BCS_FROM_RESIDUAL,HAS_INTEGRATED_VALUES
+    LOGICAL :: SUBTRACT_FIXED_BCS_FROM_RESIDUAL,HAS_INTEGRATED_VALUES,R_HAS_INTEGRATED_VALUES !Elias
     TYPE(REAL_DP_PTR_TYPE), ALLOCATABLE :: DEPENDENT_PARAMETERS(:)
     TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: BOUNDARY_CONDITIONS
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: DEPENDENT_BOUNDARY_CONDITIONS,RHS_BOUNDARY_CONDITIONS
@@ -14178,6 +14178,30 @@ CALL DistributedVector_DataGet(rhsVector,RHS_DATA,ERR,ERROR,*999)
                           IF(ASSOCIATED(EQUATIONS_TO_SOLVER_MAP)) THEN
                             equationsMatrix=>EQUATIONS_TO_SOLVER_MAP%EQUATIONS_MATRIX
                             IF(ASSOCIATED(equationsMatrix)) THEN
+
+                              rhsMapping=>SOLVER_MAPPING%equations_sets(equations_set_idx)%ptr%equations% &
+                                & vectorequations%vectormapping%rhsmapping !Elias /*
+                              IF(ASSOCIATED(rhsMapping)) THEN
+                                BOUNDARY_CONDITIONS=>SOLVER_EQUATIONS%BOUNDARY_CONDITIONS 
+                                IF(ASSOCIATED(BOUNDARY_CONDITIONS)) THEN
+                                  RHS_VARIABLE=>rhsMapping%rhsVariable
+                                  CALL BOUNDARY_CONDITIONS_VARIABLE_GET(BOUNDARY_CONDITIONS,RHS_VARIABLE, &
+                                    & RHS_BOUNDARY_CONDITIONS,ERR,ERROR,*999) 
+                                  IF(ASSOCIATED(RHS_BOUNDARY_CONDITIONS)) THEN
+                                    !Add K_R to the stiffness matrix=K_e+K_R. 
+                                      !Later on this updated matrix is used in solver_rhs_vector as well.
+                                    CALL BoundaryConditions_RobinDynamicIntegrate(RHS_BOUNDARY_CONDITIONS, &
+                                      & equationsMatrix,ERR,ERROR,*999)   
+                                  ELSE
+                                    CALL FlagError("RHS boundary conditions variable is not associated.",ERR,ERROR,*999)
+                                  ENDIF
+                                ELSE
+                                  CALL FlagError("Equations set boundary conditions is not associated.",ERR,ERROR,*999)
+                                ENDIF
+                              ELSE
+                                CALL FlagError("Equations mapping RHS mapping is not associated.",ERR,ERROR,*999)
+                              ENDIF !Elias */
+
                               CALL SOLVER_MATRIX_EQUATIONS_MATRIX_ADD(SOLVER_MATRIX,equations_set_idx,1.0_DP,equationsMatrix, &
                                 & ERR,ERROR,*999)
                             ELSE
@@ -14307,7 +14331,7 @@ CALL DistributedVector_DataGet(rhsVector,RHS_DATA,ERR,ERROR,*999)
                                         & variable
                                       IF(ASSOCIATED(LINEAR_VARIABLE)) THEN
                                         LINEAR_TEMP_VECTOR=>LINEAR_MATRIX%tempVector
-                                        !Initialise the linear temporary vector to zero
+                                        !Iniequations_column_numbertialise the linear temporary vector to zero
                                         CALL DistributedVector_AllValuesSet(LINEAR_TEMP_VECTOR,0.0_DP,ERR,ERROR,*999)
                                         NULLIFY(DEPENDENT_VECTOR)
                                         CALL FIELD_PARAMETER_SET_VECTOR_GET(DEPENDENT_FIELD,LINEAR_VARIABLE_TYPE, &
@@ -14697,6 +14721,8 @@ CALL DistributedVector_DataGet(rhsVector,RHS_DATA,ERR,ERROR,*999)
                                     ! Check if there are any integrated values to add
                                     CALL FIELD_PARAMETER_SET_CREATED(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
                                       & FIELD_INTEGRATED_NEUMANN_SET_TYPE,HAS_INTEGRATED_VALUES,ERR,ERROR,*999)
+                                    CALL FIELD_PARAMETER_SET_CREATED(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
+                                      & FIELD_INTEGRATED_ROBIN_SET_TYPE,R_HAS_INTEGRATED_VALUES,ERR,ERROR,*999) !Elias
                                     EQUATIONS_RHS_VECTOR=>rhsVector%VECTOR
                                     CALL BOUNDARY_CONDITIONS_VARIABLE_GET(BOUNDARY_CONDITIONS,RHS_VARIABLE, &
                                       & RHS_BOUNDARY_CONDITIONS,ERR,ERROR,*999)
@@ -14704,6 +14730,8 @@ CALL DistributedVector_DataGet(rhsVector,RHS_DATA,ERR,ERROR,*999)
                                       !Update RHS field by integrating any point Neumann conditions
                                       CALL BoundaryConditions_NeumannIntegrate(RHS_BOUNDARY_CONDITIONS, &
                                         & ERR,ERROR,*999)
+                                      CALL BoundaryConditions_RobinIntegrate(RHS_BOUNDARY_CONDITIONS, &
+                                        & ERR,ERROR,*999) !Elias
                                       !Loop over the rows in the equations set
                                       DO equations_row_number=1,vectorMapping%totalNumberOfRows
                                         !Get the source vector contribute to the RHS values if there are any
@@ -14744,6 +14772,13 @@ CALL DistributedVector_DataGet(rhsVector,RHS_DATA,ERR,ERROR,*999)
                                               & ERR,ERROR,*999)
                                             RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
                                           END IF
+                                          IF(R_HAS_INTEGRATED_VALUES) THEN !Elias /*
+                                            !Add any Robin integrated values, b = f + N q+R q_R
+                                            CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
+                                              & FIELD_INTEGRATED_ROBIN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
+                                              & ERR,ERROR,*999)
+                                            RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
+                                          END IF ! Elias */
                                           !Loop over the solver rows associated with this equations set row
                                           DO solver_row_idx=1,SOLVER_MAPPING%EQUATIONS_SET_TO_SOLVER_MAP(equations_set_idx)% &
                                             & EQUATIONS_ROW_TO_SOLVER_ROWS_MAPS(equations_row_number)%NUMBER_OF_SOLVER_ROWS
@@ -14911,6 +14946,13 @@ CALL DistributedVector_DataGet(rhsVector,RHS_DATA,ERR,ERROR,*999)
                                               & ERR,ERROR,*999)
                                             RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
                                           END IF
+                                          IF(R_HAS_INTEGRATED_VALUES) THEN ! Elias */
+                                            !Add any Robin integrated values, b = f + N q + R q_h
+                                            CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
+                                              & FIELD_INTEGRATED_ROBIN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
+                                              & ERR,ERROR,*999)
+                                            RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
+                                          END IF !Elias /*
                                           IF(ABS(RHS_VALUE)>=ZERO_TOLERANCE) THEN
                                             !Loop over the solver rows associated with this equations set row
                                             DO solver_row_idx=1,SOLVER_MAPPING%EQUATIONS_SET_TO_SOLVER_MAP(equations_set_idx)% &

@@ -2377,6 +2377,24 @@ CONTAINS
               & " is invalid for a linear diffusion equation."
             CALL FlagError(localError,err,error,*999)
           END SELECT
+        !-----------------------------------------------------------------
+        ! I n d e p e n d e n t    t y p e
+        !-----------------------------------------------------------------
+        CASE(EQUATIONS_SET_SETUP_INDEPENDENT_TYPE)
+          SELECT CASE(EQUATIONS_SET_SETUP%ACTION_TYPE)
+          !Set start action
+          CASE(EQUATIONS_SET_SETUP_START_ACTION)
+          !Specify finish action
+          CASE(EQUATIONS_SET_SETUP_FINISH_ACTION)
+            IF(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD_AUTO_CREATED) THEN
+              CALL FIELD_CREATE_FINISH(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,err,error,*999)
+            ENDIF
+          CASE DEFAULT
+            localError="The action type of "//TRIM(NumberToVString(EQUATIONS_SET_SETUP%ACTION_TYPE,"*",err,error))// &
+              & " for a setup type of "//TRIM(NumberToVString(EQUATIONS_SET_SETUP%SETUP_TYPE,"*",err,error))// &
+              & " is invalid."
+            CALL FlagError(localError,err,error,*999)
+          END SELECT
         CASE DEFAULT
           localError="The setup type of "//TRIM(NumberToVString(EQUATIONS_SET_SETUP%SETUP_TYPE,"*",err,error))// &
             & " is invalid for a linear diffusion equation."
@@ -4637,10 +4655,10 @@ CONTAINS
 
                           !============================================
                           ! Elias. Temporarily I add coupling terms here
-
-                          stiffnessMatrix%elementMatrix%matrix(mhs,nhs)=stiffnessMatrix%elementMatrix%matrix(mhs,nhs)+ &
-                            & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)*4.0_DP*0.5e-3*3.1415926_DP*2.114545_DP/ &
-                            & (GEOMETRIC_FIELD%GEOMETRIC_FIELD_PARAMETERS%volumes(6674)*1085.0e-9*3768.0*4)*RWG ! ~ 2K/s *phi*RWG
+                          !
+                          ! stiffnessMatrix%elementMatrix%matrix(mhs,nhs)=stiffnessMatrix%elementMatrix%matrix(mhs,nhs)+ &
+                          !   & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)*4.0_DP*0.5e-3*3.1415926_DP*2.114545_DP/ &
+                          !   & (GEOMETRIC_FIELD%GEOMETRIC_FIELD_PARAMETERS%volumes(6674)*1085.0e-9*3768.0*4)*RWG ! ~ 2K/s *phi*RWG
                             !============================================
                         ENDIF
                       ENDIF
@@ -4677,9 +4695,9 @@ CONTAINS
                     !============================================
                     ! Elias. Temporarily I add coupling terms here
 
-                    sourceVector%elementVector%vector(mhs)=sourceVector%elementVector%vector(mhs)+ &
-                      & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)*4.0_DP*0.5e-3*3.1415926_DP*36.5_DP*2.114545_DP/ &
-                      & (GEOMETRIC_FIELD%GEOMETRIC_FIELD_PARAMETERS%volumes(6674)*1085.0e-9*3768.0)*RWG ! ~ 2K/s *phi*RWG
+                    ! sourceVector%elementVector%vector(mhs)=sourceVector%elementVector%vector(mhs)+ &
+                    !   & QUADRATURE_SCHEME%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,ng)*4.0_DP*0.5e-3*3.1415926_DP*36.5_DP*2.114545_DP/ &
+                    !   & (GEOMETRIC_FIELD%GEOMETRIC_FIELD_PARAMETERS%volumes(6674)*1085.0e-9*3768.0)*RWG ! ~ 2K/s *phi*RWG
                     !============================================
                   ENDDO !ms
                 ENDDO !mh

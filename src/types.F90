@@ -706,6 +706,7 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
     INTEGER(INTG), ALLOCATABLE :: NODES_IN_FACE(:) !<NODES_IN_FACE(nn). The local node number in the domain of the nn'th local node in the face. Old CMISS name NPNF(nn,nbf).
     INTEGER(INTG), ALLOCATABLE :: DERIVATIVES_IN_FACE(:,:,:) !<DERIVATIVES_IN_FACE(i,local_derivative_idx,local_node_idx). When i=1 DERIVATIVES_IN_FACE will give the global derivative number of the local derivative_idx'th local derivative for the local_node_idx'th local node in the face, When i=2 DERIVATIVES_IN_FACE will give the global derivative version number of the local derivative_idx'th local derivative for the local_node_idx'th local node in the face.
     LOGICAL :: BOUNDARY_FACE !<Is .TRUE. if the face is on the boundary of the mesh for the domain, .FALSE. if not.
+    ! LOGICAL :: GLOBAL_BOUNDARY_FACE !<Elias Is .TRUE. if the face is on the boundary of the mesh, .FALSE. if not.
     INTEGER(INTG) :: ELEMENT_NUMBER !<The element number of the element on which the face is on
   END TYPE DOMAIN_FACE_TYPE
 
@@ -1042,6 +1043,7 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
     INTEGER(INTG), ALLOCATABLE :: ELEMENT_FACES(:) !<ELEMENT_FACES(nel). The local arc number of the nel'th element that surrounds (uses) this face.
 !    INTEGER(INTG) :: ADJACENT_FACES(0:1) !<ADJACENT_FACES(0:1). The face number of adjacent faces. ADJACENT_FACES(0) is the face number adjacent in the -xi direction. ADJACENT_FACES(1) is the face number adjacent in the +xi direction. Old CMISS name NPL(2..3,0,nl).
     LOGICAL :: BOUNDARY_FACE !<Is .TRUE. if the face is on the boundary of the mesh for the domain, .FALSE. if not.
+    LOGICAL :: GLOBAL_BOUNDARY_FACE !<Elias Is .TRUE. if the face is on the boundary of the mesh, .FALSE. if not.
     INTEGER(INTG) :: ELEMENT_NUMBER !<The element number of the element on which the face is on
   END TYPE DECOMPOSITION_FACE_TYPE
 
@@ -1225,6 +1227,7 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
     REAL(DP), ALLOCATABLE :: VOLUMES(:) !<VOLUMES(ne). The volume of the ne'th element in the field decomposition.
     INTEGER(INTG) :: NUMBER_OF_FIELDS_USING !<The number of fields that use these geometric parameters for their scaling.
     TYPE(FIELD_PTR_TYPE), POINTER :: FIELDS_USING(:) !< FIELDS_USINGS(field_idx). A pointer to the field_idx'th field that uses these geometric parameters for its scaling.
+    REAL(DP) :: surfaceArea !<Elias The surface area of all boundary faces. I thinks the calculation is wrong for the whole body at least.
   END TYPE FIELD_GEOMETRIC_PARAMETERS_TYPE
 
   !Elias */

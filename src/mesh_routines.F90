@@ -3097,6 +3097,7 @@ CONTAINS
     FACE%NUMBER_OF_SURROUNDING_ELEMENTS=0
 !    FACE%ADJACENT_FACES=0
     FACE%BOUNDARY_FACE=.FALSE.
+    ! FACE%GLOBAL_BOUNDARY_FACE=.FALSE. !Elias
 
     EXITS("DECOMPOSITION_TOPOLOGY_FACE_INITIALISE")
     RETURN
@@ -3357,7 +3358,17 @@ CONTAINS
                           IF(DECOMPOSITION_FACE%NUMBER_OF_SURROUNDING_ELEMENTS==1) THEN
                             DECOMPOSITION_FACE%BOUNDARY_FACE=.TRUE.
                             DOMAIN_FACE%BOUNDARY_FACE=.TRUE.
+                            !Elias \*
+                            !Find only external boundary faces.
+                            ! IF(ALL(DOMAIN_FACE%NODES_IN_FACE<DOMAIN%MAPPINGS%NODES%GHOST_START)) THEN
+                            !   DECOMPOSITION_FACE%GLOBAL_BOUNDARY_FACE=.TRUE.
+                            !   DOMAIN_FACE%GLOBAL_BOUNDARY_FACE=.TRUE.
+                            ! END IF
+                            !Elias *\
                           ENDIF
+
+
+
                           !Allocate the elements surrounding the face
                           ALLOCATE(DECOMPOSITION_FACE%SURROUNDING_ELEMENTS(DECOMPOSITION_FACE%NUMBER_OF_SURROUNDING_ELEMENTS), &
                             & STAT=ERR)
@@ -5742,6 +5753,7 @@ CONTAINS
     FACE%NUMBER=0
     NULLIFY(FACE%BASIS)
     FACE%BOUNDARY_FACE=.FALSE.
+    ! FACE%GLOBAL_BOUNDARY_FACE=.FALSE. !Elias
 
     EXITS("DOMAIN_TOPOLOGY_FACE_INITIALISE")
     RETURN

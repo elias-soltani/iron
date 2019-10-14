@@ -10288,8 +10288,8 @@ CONTAINS
              IF(componentNumber==1) THEN
                !Input function
                period = 800
-               tt=MOD(TIME,period)   !Elias
-!               tt=MOD(TIME*1000,period)
+               ! tt=MOD(TIME,period)   !Elias
+              tt=MOD(TIME*1000,period)
                tmax=150.0_DP
                Qo=100000.0_DP
                VALUE=(Qo*tt/(tmax**2.0_DP))*EXP(-(tt**2.0_DP)/(2.0_DP*(tmax**2.0_DP)))

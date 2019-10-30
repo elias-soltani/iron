@@ -10286,13 +10286,64 @@ CONTAINS
            SELECT CASE(GLOBAL_DERIV_INDEX)
            CASE(NO_GLOBAL_DERIV)
              IF(componentNumber==1) THEN
-               !Input function
-               period = 800
-               ! tt=MOD(TIME,period)   !Elias
-              tt=MOD(TIME*1000,period)
-               tmax=150.0_DP
-               Qo=100000.0_DP
-               VALUE=(Qo*tt/(tmax**2.0_DP))*EXP(-(tt**2.0_DP)/(2.0_DP*(tmax**2.0_DP)))
+              !  !Input function
+              !  period = 800
+              !  ! tt=MOD(TIME,period)   !Elias
+              ! tt=MOD(TIME*1000,period)
+              !  tmax=150.0_DP
+              !  Qo=100000.0_DP
+              !  VALUE=(Qo*tt/(tmax**2.0_DP))*EXP(-(tt**2.0_DP)/(2.0_DP*(tmax**2.0_DP)))
+
+              !Olufsen Aorta
+              t(1)= 0.0011660 ; q(1)= 17.39051
+              t(2)= 0.0215840 ; q(2)= 10.41978
+              t(3)= 0.0340860 ; q(3)= 18.75892
+              t(4)= 0.0731370 ; q(4)= 266.3842
+              t(5)= 0.0857710 ; q(5)= 346.3755
+              t(6)= 0.1029220 ; q(6)= 413.8419
+              t(7)= 0.1154270 ; q(7)= 424.2680
+              t(8)= 0.1483530 ; q(8)= 429.1147
+              t(9)= 0.1698860 ; q(9)= 411.0127
+              t(10)= 0.220794 ; q(10)= 319.151
+              t(11)= 0.264856 ; q(11)= 207.816
+              t(12)= 0.295415 ; q(12)= 160.490
+              t(13)= 0.325895 ; q(13)= 70.0342
+              t(14)= 0.346215 ; q(14)= 10.1939
+              t(15)= 0.363213 ; q(15)= -5.1222
+              t(16)= 0.383666 ; q(16)= 6.68963
+              t(17)= 0.405265 ; q(17)= 24.0659
+              t(18)= 0.427988 ; q(18)= 35.8762
+              t(19)= 0.455272 ; q(19)= 58.8137
+              t(20)= 0.477990 ; q(20)= 67.8414
+              t(21)= 0.502943 ; q(21)= 57.3893
+              t(22)= 0.535816 ; q(22)= 33.7142
+              t(23)= 0.577789 ; q(23)= 20.4676
+              t(24)= 0.602753 ; q(24)= 16.2763
+              t(25)= 0.639087 ; q(25)= 22.5119
+              t(26)= 0.727616 ; q(26)= 18.9721
+              t(27)= 0.783235 ; q(27)= 18.9334
+              t(28)= 0.800000 ; q(28)= 16.1121
+              t(29)= 1.000000 ; q(29)= 17.39051 !Elias Commented out the flowrate and copied the data from next case and also modified it so it works for next period as well. Also, I added this line to the data.
+              !Initialize variables
+              period = 800
+              m=1
+              ! n=28
+              n=29 !Elias
+              !Compute derivation
+              DO i=1,n-1
+                delta(i)=(q(i+1)-q(i))/(t(i+1)-t(i))
+              END DO
+              ! delta(n)=delta(n-1)+(delta(n-1)-delta(n-2))/(t(n-1)-t(n-2))*(t(n)-t(n-1)) !Elias commented this line
+              !Find subinterval
+              DO j=1,n-1
+                IF(t(j) <= (MOD(TIME,period)/period)) THEN
+                  m=j
+                END IF
+              END DO
+              !Evaluate interpolant
+              s=(MOD(TIME,period)/period)-t(m)
+              VALUE=(q(m)+s*delta(m))
+
              ELSE
                CALL FlagError("Incorrect component specification for Aorta flow rate waveform ",ERR,ERROR,*999)
              END IF

@@ -1,5 +1,5 @@
 !> \file
-!> $Id: multi_physics_routines.F90 177 2009-04-20 
+!> $Id: multi_physics_routines.F90 177 2009-04-20
 !> \authors Christian Michler, Jack Lee
 !> \brief This module handles all multi physics routines.
 !>
@@ -57,11 +57,12 @@ MODULE MULTI_PHYSICS_ROUTINES
   USE KINDS
   USE MULTI_COMPARTMENT_TRANSPORT_ROUTINES
   USE NAVIER_STOKES_EQUATIONS_ROUTINES
+  USE NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_ROUTINES
   USE PROBLEM_CONSTANTS
   USE STRINGS
   USE TYPES
 
-#include "macros.h"  
+#include "macros.h"
 
 
   IMPLICIT NONE
@@ -77,13 +78,13 @@ MODULE MULTI_PHYSICS_ROUTINES
   !Interfaces
 
   PUBLIC MultiPhysics_FiniteElementJacobianEvaluate,MultiPhysics_FiniteElementResidualEvaluate
-  
+
   PUBLIC MultiPhysics_EquationsSetSpecificationSet,MULTI_PHYSICS_FINITE_ELEMENT_CALCULATE, &
     & MULTI_PHYSICS_EQUATIONS_SET_SETUP,MultiPhysics_EquationsSetSolnMethodSet, &
     & MultiPhysics_ProblemSpecificationSet,MULTI_PHYSICS_PROBLEM_SETUP, &
     & MULTI_PHYSICS_POST_SOLVE,MULTI_PHYSICS_PRE_SOLVE,MULTI_PHYSICS_CONTROL_LOOP_PRE_LOOP, &
     & MULTI_PHYSICS_CONTROL_LOOP_POST_LOOP
-  
+
 CONTAINS
 
   !
@@ -137,7 +138,7 @@ CONTAINS
 999 ERRORS("MultiPhysics_EquationsSetSpecificationSet",err,error)
     EXITS("MultiPhysics_EquationsSetSpecificationSet")
     RETURN 1
-    
+
   END SUBROUTINE MultiPhysics_EquationsSetSpecificationSet
 
   !
@@ -154,7 +155,7 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
     TYPE(VARYING_STRING) :: LOCAL_ERROR
-    
+
     ENTERS("MULTI_PHYSICS_FINITE_ELEMENT_CALCULATE",ERR,ERROR,*999)
 
     IF(ASSOCIATED(EQUATIONS_SET)) THEN
@@ -183,7 +184,7 @@ CONTAINS
     ELSE
       CALL FlagError("Equations set is not associated",ERR,ERROR,*999)
     ENDIF
-       
+
     EXITS("MULTI_PHYSICS_FINITE_ELEMENT_CALCULATE")
     RETURN
 999 ERRORSEXITS("MULTI_PHYSICS_FINITE_ELEMENT_CALCULATE",ERR,ERROR)
@@ -204,7 +205,7 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
     TYPE(VARYING_STRING) :: LOCAL_ERROR
-    
+
     ENTERS("MultiPhysics_FiniteElementJacobianEvaluate",ERR,ERROR,*999)
 
     IF(ASSOCIATED(EQUATIONS_SET)) THEN
@@ -233,12 +234,12 @@ CONTAINS
     ELSE
       CALL FlagError("Equations set is not associated",ERR,ERROR,*999)
     ENDIF
-       
+
     EXITS("MultiPhysics_FiniteElementJacobianEvaluate")
     RETURN
 999 ERRORSEXITS("MultiPhysics_FiniteElementJacobianEvaluate",ERR,ERROR)
     RETURN 1
-    
+
   END SUBROUTINE MultiPhysics_FiniteElementJacobianEvaluate
 
   !
@@ -255,7 +256,7 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
     TYPE(VARYING_STRING) :: LOCAL_ERROR
-    
+
     ENTERS("MultiPhysics_FiniteElementResidualEvaluate",ERR,ERROR,*999)
 
     IF(ASSOCIATED(EQUATIONS_SET)) THEN
@@ -285,12 +286,12 @@ CONTAINS
     ELSE
       CALL FlagError("Equations set is not associated",ERR,ERROR,*999)
     ENDIF
-       
+
     EXITS("MultiPhysics_FiniteElementResidualEvaluate")
     RETURN
 999 ERRORSEXITS("MultiPhysics_FiniteElementResidualEvaluate",ERR,ERROR)
     RETURN 1
-    
+
   END SUBROUTINE MultiPhysics_FiniteElementResidualEvaluate
 
   !
@@ -307,7 +308,7 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
     TYPE(VARYING_STRING) :: LOCAL_ERROR
-    
+
     ENTERS("MULTI_PHYSICS_EQUATIONS_SET_SETUP",ERR,ERROR,*999)
 
     IF(ASSOCIATED(EQUATIONS_SET)) THEN
@@ -336,13 +337,13 @@ CONTAINS
     ELSE
       CALL FlagError("Equations set is not associated.",ERR,ERROR,*999)
     ENDIF
-       
+
     EXITS("MULTI_PHYSICS_EQUATIONS_SET_SETUP")
     RETURN
 999 ERRORSEXITS("MULTI_PHYSICS_EQUATIONS_SET_SETUP",ERR,ERROR)
     RETURN 1
   END SUBROUTINE MULTI_PHYSICS_EQUATIONS_SET_SETUP
-  
+
 
   !
   !================================================================================================================================
@@ -358,7 +359,7 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
     TYPE(VARYING_STRING) :: LOCAL_ERROR
-    
+
     ENTERS("MultiPhysics_EquationsSetSolnMethodSet",ERR,ERROR,*999)
 
     IF(ASSOCIATED(EQUATIONS_SET)) THEN
@@ -387,13 +388,13 @@ CONTAINS
     ELSE
       CALL FlagError("Equations set is not associated.",ERR,ERROR,*999)
     ENDIF
-       
+
     EXITS("MultiPhysics_EquationsSetSolnMethodSet")
     RETURN
 999 ERRORS("MultiPhysics_EquationsSetSolnMethodSet",ERR,ERROR)
     EXITS("MultiPhysics_EquationsSetSolnMethodSet")
     RETURN 1
-    
+
   END SUBROUTINE MultiPhysics_EquationsSetSolnMethodSet
 
   !
@@ -436,6 +437,8 @@ CONTAINS
         CALL DiffusionAdvectionDiffusion_ProblemSpecificationSet(problem,problemSpecification,err,error,*999)
       CASE(PROBLEM_MULTI_COMPARTMENT_TRANSPORT_TYPE)
         CALL MultiCompartmentTransport_ProblemSpecificationSet(problem,problemSpecification,err,error,*999)
+      CASE(PROBLEM_NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_TYPE)
+        CALL NavierStokesDiffAdvDiff_ProblemSpecificationSet(problem,problemSpecification,err,error,*999)
       CASE DEFAULT
         localError="The second problem specification of "//TRIM(NumberToVstring(problemType,"*",err,error))// &
           & " is not valid for a multi physics problem."
@@ -450,7 +453,7 @@ CONTAINS
 999 ERRORS("MultiPhysics_ProblemSpecificationSet",err,error)
     EXITS("MultiPhysics_ProblemSpecificationSet")
     RETURN 1
-    
+
   END SUBROUTINE MultiPhysics_ProblemSpecificationSet
 
   !
@@ -467,7 +470,7 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
     TYPE(VARYING_STRING) :: LOCAL_ERROR
-    
+
     ENTERS("MULTI_PHYSICS_PROBLEM_SETUP",ERR,ERROR,*999)
 
     IF(ASSOCIATED(PROBLEM)) THEN
@@ -482,7 +485,7 @@ CONTAINS
       CASE(PROBLEM_FINITE_ELASTICITY_FLUID_PRESSURE_TYPE)
         CALL ELASTICITY_FLUID_PRESSURE_PROBLEM_SETUP(PROBLEM,PROBLEM_SETUP,ERR,ERROR,*999)
       CASE(PROBLEM_BIOELECTRIC_FINITE_ELASTICITY_TYPE)
-        CALL BIOELECTRIC_FINITE_ELASTICITY_PROBLEM_SETUP(PROBLEM,PROBLEM_SETUP,ERR,ERROR,*999) 
+        CALL BIOELECTRIC_FINITE_ELASTICITY_PROBLEM_SETUP(PROBLEM,PROBLEM_SETUP,ERR,ERROR,*999)
       CASE(PROBLEM_FINITE_ELASTICITY_STOKES_TYPE)
         CALL FlagError("Not implemented.",ERR,ERROR,*999)
       CASE(PROBLEM_FINITE_ELASTICITY_NAVIER_STOKES_TYPE)
@@ -493,6 +496,8 @@ CONTAINS
         CALL DIFFUSION_ADVECTION_DIFFUSION_PROBLEM_SETUP(PROBLEM,PROBLEM_SETUP,ERR,ERROR,*999)
       CASE(PROBLEM_MULTI_COMPARTMENT_TRANSPORT_TYPE)
         CALL MULTI_COMPARTMENT_TRANSPORT_PROBLEM_SETUP(PROBLEM,PROBLEM_SETUP,ERR,ERROR,*999)
+      CASE(PROBLEM_NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_TYPE)
+        CALL NavierStokesDiffAdvDiff_ProblemSetup(PROBLEM,PROBLEM_SETUP,ERR,ERROR,*999)
       CASE DEFAULT
         LOCAL_ERROR="Problem type "//TRIM(NUMBER_TO_VSTRING(PROBLEM%SPECIFICATION(2),"*",ERR,ERROR))// &
           & " is not valid for a multi physics problem class."
@@ -501,7 +506,7 @@ CONTAINS
     ELSE
       CALL FlagError("Problem is not associated.",ERR,ERROR,*999)
     ENDIF
-       
+
     EXITS("MULTI_PHYSICS_PROBLEM_SETUP")
     RETURN
 999 ERRORSEXITS("MULTI_PHYSICS_PROBLEM_SETUP",ERR,ERROR)
@@ -522,7 +527,7 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
     TYPE(VARYING_STRING) :: LOCAL_ERROR
-    
+
     ENTERS("MULTI_PHYSICS_POST_SOLVE",ERR,ERROR,*999)
 
     IF(ASSOCIATED(CONTROL_LOOP%PROBLEM)) THEN
@@ -548,6 +553,8 @@ CONTAINS
         CALL DIFFUSION_ADVECTION_DIFFUSION_POST_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
       CASE(PROBLEM_MULTI_COMPARTMENT_TRANSPORT_TYPE)
         CALL MULTI_COMPARTMENT_TRANSPORT_POST_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
+      CASE(PROBLEM_NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_TYPE)
+        CALL NavierStokesDiffAdvDiff_PostSolve(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
       CASE DEFAULT
         LOCAL_ERROR="Problem type "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(2),"*",ERR,ERROR))// &
           & " is not valid for a multi physics problem class."
@@ -556,7 +563,7 @@ CONTAINS
     ELSE
       CALL FlagError("Problem is not associated.",ERR,ERROR,*999)
     ENDIF
-       
+
     EXITS("MULTI_PHYSICS_POST_SOLVE")
     RETURN
 999 ERRORSEXITS("MULTI_PHYSICS_POST_SOLVE",ERR,ERROR)
@@ -577,7 +584,7 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
     TYPE(VARYING_STRING) :: LOCAL_ERROR
-    
+
     ENTERS("MULTI_PHYSICS_PRE_SOLVE",ERR,ERROR,*999)
 
     IF(ASSOCIATED(CONTROL_LOOP%PROBLEM)) THEN
@@ -603,6 +610,8 @@ CONTAINS
         CALL DIFFUSION_ADVECTION_DIFFUSION_PRE_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
       CASE(PROBLEM_MULTI_COMPARTMENT_TRANSPORT_TYPE)
         CALL MULTI_COMPARTMENT_TRANSPORT_PRE_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
+      CASE(PROBLEM_NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_TYPE)
+        CALL NavierStokesDiffAdvDiff_PreSolve(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
       CASE DEFAULT
         LOCAL_ERROR="Problem type "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(2),"*",ERR,ERROR))// &
           & " is not valid for a multi physics problem class."
@@ -611,7 +620,7 @@ CONTAINS
     ELSE
       CALL FlagError("Problem is not associated.",ERR,ERROR,*999)
     ENDIF
-       
+
     EXITS("MULTI_PHYSICS_PRE_SOLVE")
     RETURN
 999 ERRORSEXITS("MULTI_PHYSICS_PRE_SOLVE",ERR,ERROR)
@@ -656,6 +665,8 @@ CONTAINS
       CASE(PROBLEM_DIFFUSION_ADVECTION_DIFFUSION_TYPE)
         !do nothing
       CASE(PROBLEM_MULTI_COMPARTMENT_TRANSPORT_TYPE)
+        !do nothing
+      CASE(PROBLEM_NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_TYPE)
         !do nothing
       CASE DEFAULT
         LOCAL_ERROR="Problem type "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(2),"*",ERR,ERROR))// &
@@ -711,6 +722,8 @@ CONTAINS
         !do nothing
       CASE(PROBLEM_MULTI_COMPARTMENT_TRANSPORT_TYPE)
         !do nothing
+      CASE(PROBLEM_NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_TYPE)
+        !do nothing
       CASE DEFAULT
         LOCAL_ERROR="Problem type "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(2),"*",ERR,ERROR))// &
           & " is not valid for a multi physics problem class."
@@ -731,4 +744,3 @@ CONTAINS
   !
 
 END MODULE MULTI_PHYSICS_ROUTINES
-

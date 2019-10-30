@@ -110,6 +110,7 @@ set(IRON_Fortran_SRC
     multi_compartment_transport_routines.F90
     multi_physics_routines.F90
     Navier_Stokes_equations_routines.F90
+    Navier_Stokes_diffusion_advection_diffusion_equations_routines.F90
     node_routines.F90
     opencmiss.F90
     opencmiss_iron.F90

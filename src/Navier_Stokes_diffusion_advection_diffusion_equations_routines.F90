@@ -26,7 +26,7 @@
 !> Auckland, the University of Oxford and King's College, London.
 !> All Rights Reserved.
 !>
-!> Contributor(s): Chris Bradley, Elias Ghadam Soltani
+!> Contributor(s):
 !>
 !> Alternatively, the contents of this file may be used under the terms of
 !> either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -111,7 +111,7 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Sets/changes the solution method for a coupled diffusion & advection-diffusion equation type of a multi physics equations set class.
+  !>Sets/changes the solution method for a coupled navier stokes diffusion & advection-diffusion equation type of a multi physics equations set class.
   SUBROUTINE NavierStokesDiffAdvDiff_EquationsSetSolnMethodSet(EQUATIONS_SET,SOLUTION_METHOD,ERR,ERROR,*)
 
     !Argument variables
@@ -171,7 +171,7 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Sets up the diffusion & advection-diffusion coupled equation.
+  !>Sets up the Navier-Stokes & diffusion & advection-diffusion coupled equation.
   SUBROUTINE NavierStokesDiffAdvDiff_EquationsSetSetup(EQUATIONS_SET,EQUATIONS_SET_SETUP,ERR,ERROR,*)
 
     !Argument variables
@@ -198,7 +198,7 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Calculates the element stiffness matrices and RHS for a coupled diffusion & advection-diffusion equation finite element equations set.
+  !>Calculates the element stiffness matrices and RHS for a coupled Navier Stokes & diffusion & advection-diffusion equation finite element equations set.
   SUBROUTINE NavierStokesDiffAdvDiff_FiniteElementCalculate(EQUATIONS_SET,ELEMENT_NUMBER,ERR,ERROR,*)
 
     !Argument variables
@@ -249,7 +249,7 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Sets the problem specification for a coupled diffusion & advection-diffusion problem.
+  !>Sets the problem specification for a coupled Navier-Stokes & diffusion & advection-diffusion problem.
   SUBROUTINE NavierStokesDiffAdvDiff_ProblemSpecificationSet(problem,problemSpecification,err,error,*)
 
     !Argument variables
@@ -267,12 +267,12 @@ CONTAINS
       IF(SIZE(problemSpecification,1)==3) THEN
         problemSubtype=problemSpecification(3)
         SELECT CASE(problemSubtype)
-        CASE(PROBLEM_COUPLED_SOURCE_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE, &
-          & PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
+        CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE, &
+          & PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
           !ok
         CASE DEFAULT
           localError="The third problem specification of "//TRIM(NumberToVstring(problemSubtype,"*",err,error))// &
-            & " is not valid for a coupled diffusion & advection-diffusion type of a multi physics problem."
+            & " is not valid for a coupled Navier-Stokes & diffusion & advection-diffusion type of a multi physics problem."
           CALL FlagError(localError,err,error,*999)
         END SELECT
         IF(ALLOCATED(problem%specification)) THEN
@@ -281,10 +281,10 @@ CONTAINS
           ALLOCATE(problem%specification(3),stat=err)
           IF(err/=0) CALL FlagError("Could not allocate problem specification.",err,error,*999)
         END IF
-        problem%specification(1:3)=[PROBLEM_MULTI_PHYSICS_CLASS,PROBLEM_DIFFUSION_ADVECTION_DIFFUSION_TYPE, &
+        problem%specification(1:3)=[PROBLEM_MULTI_PHYSICS_CLASS,PROBLEM_NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_TYPE, &
           & problemSubtype]
       ELSE
-        CALL FlagError("Diffusion advection-diffusion transport problem specification must have 3 entries.",err,error,*999)
+        CALL FlagError("Navier-Stokes diffusion advection-diffusion problem specification must have 3 entries.",err,error,*999)
       END IF
     ELSE
       CALL FlagError("Problem is not associated.",err,error,*999)
@@ -302,7 +302,7 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Sets up the coupled diffusion-diffusion equations problem.
+  !>Sets up the coupled Navier-Stokes diffusion-diffusion equations problem.
   SUBROUTINE NavierStokesDiffAdvDiff_ProblemSetup(PROBLEM,PROBLEM_SETUP,ERR,ERROR,*)
 
     !Argument variables
@@ -311,8 +311,10 @@ CONTAINS
     INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local Variables
-    TYPE(CONTROL_LOOP_TYPE), POINTER :: CONTROL_LOOP,CONTROL_LOOP_ROOT
-    TYPE(SOLVER_TYPE), POINTER :: SOLVER_DIFFUSION, SOLVER_ADVECTION_DIFFUSION,cellMLSolver
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: CONTROL_LOOP,CONTROL_LOOP_ROOT,simpleLoopCellML1,whileLoopConditional,simpleLoop2, &
+      & iterativeWhileLoop,timeLoopFlow
+    TYPE(SOLVER_TYPE), POINTER :: SOLVER_DIFFUSION, SOLVER_ADVECTION_DIFFUSION,cellMLSolver,solverAdvectionDiffusion, &
+      & solverDiffusion, solver
     TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: SOLVER_EQUATIONS_DIFFUSION, SOLVER_EQUATIONS_ADVECTION_DIFFUSION
     TYPE(SOLVERS_TYPE), POINTER :: SOLVERS
     TYPE(CELLML_EQUATIONS_TYPE), POINTER :: CELLML_EQUATIONS
@@ -330,15 +332,15 @@ CONTAINS
       IF(.NOT.ALLOCATED(problem%specification)) THEN
         CALL FlagError("Problem specification is not allocated.",err,error,*999)
       ELSE IF(SIZE(problem%specification,1)<3) THEN
-        CALL FlagError("Problem specification must have three entries for a diffusion-advection diffusion problem.", &
+        CALL FlagError("Problem specification must have three entries for a coupled Navier-Stokes & diffusion & advection-diffusion problem.", &
           & err,error,*999)
       END IF
       SELECT CASE(PROBLEM%SPECIFICATION(3))
 
       !--------------------------------------------------------------------
-      !   coupled source diffusion--advection-diffusion
+      !   coupled  source diffusion--advection-diffusion
       !--------------------------------------------------------------------
-    CASE(PROBLEM_COUPLED_SOURCE_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE, PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
+      CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
         SELECT CASE(PROBLEM_SETUP%SETUP_TYPE)
         CASE(PROBLEM_SETUP_INITIAL_TYPE)
           SELECT CASE(PROBLEM_SETUP%ACTION_TYPE)
@@ -521,6 +523,322 @@ CONTAINS
                 & " is not valid for cellML equations setup Navier-Stokes fluid mechanics problem."
               CALL FlagError(localError,err,error,*999)
             END SELECT
+
+          CASE DEFAULT
+            localError="The action type of "//TRIM(NumberToVString(PROBLEM_SETUP%ACTION_TYPE,"*",err,error))// &
+              & " for a setup type of "//TRIM(NumberToVString(PROBLEM_SETUP%SETUP_TYPE,"*",err,error))// &
+              & " is invalid for a CellML setup for a 1D Navier-Stokes equation."
+            CALL FlagError(localError,err,error,*999)
+          END SELECT    !Elias */
+        CASE DEFAULT
+          LOCAL_ERROR="The setup type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%SETUP_TYPE,"*",ERR,ERROR))// &
+            & " is invalid for a coupled diffusion & advection-diffusion equation."
+          CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+        END SELECT
+
+
+      !--------------------------------------------------------------------
+      !   coupled Navier-Stokes & source diffusion--advection-diffusion
+      !--------------------------------------------------------------------
+      CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+        SELECT CASE(PROBLEM_SETUP%SETUP_TYPE)
+        CASE(PROBLEM_SETUP_INITIAL_TYPE)
+          SELECT CASE(PROBLEM_SETUP%ACTION_TYPE)
+          CASE(PROBLEM_SETUP_START_ACTION)
+            !Do nothing????
+          CASE(PROBLEM_SETUP_FINISH_ACTION)
+            !Do nothing???
+          CASE DEFAULT
+            LOCAL_ERROR="The action type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%ACTION_TYPE,"*",ERR,ERROR))// &
+              & " for a setup type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%SETUP_TYPE,"*",ERR,ERROR))// &
+              & " is invalid for a coupled Navier-Stokes diffusion & advection-diffusion equation."
+            CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+          END SELECT
+        CASE(PROBLEM_SETUP_CONTROL_TYPE)
+          SELECT CASE(PROBLEM_SETUP%ACTION_TYPE)
+          CASE(PROBLEM_SETUP_START_ACTION)
+            !Set up the root time control loop
+            CALL CONTROL_LOOP_CREATE_START(PROBLEM,CONTROL_LOOP,ERR,ERROR,*999)
+            CALL CONTROL_LOOP_TYPE_SET(CONTROL_LOOP,PROBLEM_CONTROL_TIME_LOOP_TYPE,ERR,ERROR,*999)
+            CALL CONTROL_LOOP_NUMBER_OF_SUB_LOOPS_SET(CONTROL_LOOP,3,err,error,*999)
+            CALL CONTROL_LOOP_LABEL_SET(CONTROL_LOOP,"main time loop",err,error,*999)
+            !Setup the simple loop for shivering cellML sovler
+            NULLIFY(simpleLoopCellML1)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,1,simpleLoopCellML1,err,error,*999)
+            CALL CONTROL_LOOP_TYPE_SET(simpleLoopCellML1,PROBLEM_CONTROL_SIMPLE_TYPE,err,error,*999)
+            CALL CONTROL_LOOP_LABEL_SET(simpleLoopCellML1,"Shivering CellML solver Loop",err,error,*999)
+            !Setup a control loop for solving flow whenever the flag continue loop is on
+            NULLIFY(whileLoopConditional)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,2,whileLoopConditional,err,error,*999)
+            CALL CONTROL_LOOP_TYPE_SET(whileLoopConditional,PROBLEM_CONTROL_WHILE_LOOP_TYPE,err,error,*999)
+            CALL CONTROL_LOOP_MAXIMUM_ITERATIONS_SET(whileLoopConditional,1000,err,error,*999) !I do not need this probably
+            CALL ControlLoop_AbsoluteToleranceSet(whileLoopConditional,0.1_DP,err,error,*999)   !I do not need this probalby
+            CALL CONTROL_LOOP_LABEL_SET(whileLoopConditional,"Conditional while loop",err,error,*999)
+            CALL CONTROL_LOOP_NUMBER_OF_SUB_LOOPS_SET(whileLoopConditional,1,err,error,*999)
+            !Setup the simple loop for shivering cellML sovler
+            NULLIFY(simpleLoop2)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
+            CALL CONTROL_LOOP_TYPE_SET(simpleLoop2,PROBLEM_CONTROL_SIMPLE_TYPE,err,error,*999)
+            CALL CONTROL_LOOP_LABEL_SET(simpleLoop2,"Diffusion advection-diffusion solver Loop",err,error,*999)
+            !Set up a time loop for flow solver
+            NULLIFY(timeLoopFlow)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(whileLoopConditional,1,timeLoopFlow,err,error,*999)
+            CALL CONTROL_LOOP_TYPE_SET(timeLoopFlow,PROBLEM_CONTROL_TIME_LOOP_TYPE,ERR,ERROR,*999)
+            CALL CONTROL_LOOP_NUMBER_OF_SUB_LOOPS_SET(timeLoopFlow,1,err,error,*999)
+            CALL CONTROL_LOOP_LABEL_SET(timeLoopFlow,"Flow time loop",err,error,*999)
+            ! The Characteristics branch solver/ Navier-Stokes iterative coupling loop. TODO: Add another subtype for RCR or 1D0D subtype and create the control loop and solvers for it.
+            NULLIFY(iterativeWhileLoop)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(timeLoopFlow,1,iterativeWhileLoop,err,error,*999)
+            CALL CONTROL_LOOP_TYPE_SET(iterativeWhileLoop,PROBLEM_CONTROL_WHILE_LOOP_TYPE,err,error,*999)
+            CALL CONTROL_LOOP_MAXIMUM_ITERATIONS_SET(iterativeWhileLoop,1000,err,error,*999)
+            CALL ControlLoop_AbsoluteToleranceSet(iterativeWhileLoop,1.0E3_DP,err,error,*999)
+            CALL CONTROL_LOOP_LABEL_SET(iterativeWhileLoop,"1D Characteristic/NSE branch value convergence Loop",err,error,*999)
+          CASE(PROBLEM_SETUP_FINISH_ACTION)
+            !Finish the control loops
+            CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
+            CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,ERR,ERROR,*999)
+            CALL CONTROL_LOOP_CREATE_FINISH(CONTROL_LOOP,ERR,ERROR,*999)
+          CASE DEFAULT
+            LOCAL_ERROR="The action type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%ACTION_TYPE,"*",ERR,ERROR))// &
+              & " for a setup type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%SETUP_TYPE,"*",ERR,ERROR))// &
+              & " is invalid for a coupled Navier-Stokes & diffusion & advection-diffusion equation."
+            CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+          END SELECT
+        !Create the solvers
+        CASE(PROBLEM_SETUP_SOLVERS_TYPE)
+          !Get the control loop
+          CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
+          NULLIFY(CONTROL_LOOP)
+          CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,ERR,ERROR,*999)
+          SELECT CASE(PROBLEM_SETUP%ACTION_TYPE)
+          CASE(PROBLEM_SETUP_START_ACTION)
+            !We need 5 solvers: 1 CELLML evalueator solver for shivering, 2 solvers for solving flow i.e. characteristic nonlinear solver and 1D NS solver, and 1
+            !solver for solving energy equation in blood vessels and another one to solve transient diffusion equation for bioheat equation.
+
+            !Start the solvers creation
+            NULLIFY(solvers)
+            NULLIFY(cellMLSolver)
+            NULLIFY(simpleLoopCellML1)
+            !Time loop has 3 sub loops, simple loop, while loop and another simple loop
+
+            !Simple loop for cellML solver
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,1,simpleLoopCellML1,err,error,*999)
+            CALL SOLVERS_CREATE_START(simpleLoopCellML1,solvers,ERR,ERROR,*999)
+            CALL SOLVERS_NUMBER_SET(solvers,1,err,error,*999)
+!!!-- CELLML EVALUATOR SOLVER --!!!
+            CALL SOLVERS_SOLVER_GET(solvers,1,cellMLSolver,err,error,*999)
+            CALL SOLVER_TYPE_SET(cellMLSolver,SOLVER_CELLML_EVALUATOR_TYPE,err,error,*999)
+            CALL SOLVER_LABEL_SET(cellMLSolver,"Evaluator Solver",err,error,*999)
+
+            !Conditional while loop
+            NULLIFY(whileLoopConditional)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,2,whileLoopConditional,err,error,*999)
+            !Flow time loop
+            NULLIFY(timeLoopFlow)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(whileLoopConditional,1,timeLoopFlow,err,error,*999)
+            !Iterative while loop for Flow
+            NULLIFY(iterativeWhileLoop)
+            NULLIFY(solvers)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(timeLoopFlow,1,iterativeWhileLoop,err,error,*999)
+            CALL SOLVERS_CREATE_START(iterativeWhileLoop,solvers,err,error,*999)
+            CALL SOLVERS_NUMBER_SET(solvers,2,err,error,*999)
+!!!-- C H A R A C T E R I S T I C --!!!
+            NULLIFY(SOLVER)
+            CALL SOLVERS_SOLVER_GET(SOLVERS,1,SOLVER,err,error,*999)
+            CALL SOLVER_TYPE_SET(SOLVER,SOLVER_NONLINEAR_TYPE,err,error,*999)
+            CALL SOLVER_LABEL_SET(solver,"Characteristic Solver",err,error,*999)
+            CALL SOLVER_LIBRARY_TYPE_SET(SOLVER,SOLVER_PETSC_LIBRARY,err,error,*999)
+!!!-- N A V I E R   S T O K E S --!!!
+            NULLIFY(SOLVER)
+            CALL SOLVERS_SOLVER_GET(SOLVERS,2,SOLVER,err,error,*999)
+            CALL SOLVER_TYPE_SET(SOLVER,SOLVER_DYNAMIC_TYPE,err,error,*999)
+            CALL SOLVER_LABEL_SET(solver,"Navier-Stokes Solver",err,error,*999)
+            CALL SOLVER_DYNAMIC_LINEARITY_TYPE_SET(SOLVER,SOLVER_DYNAMIC_NONLINEAR,err,error,*999)
+            CALL SOLVER_DYNAMIC_ORDER_SET(SOLVER,SOLVER_DYNAMIC_FIRST_ORDER,err,error,*999)
+            CALL SOLVER_DYNAMIC_DEGREE_SET(SOLVER,SOLVER_DYNAMIC_FIRST_DEGREE,err,error,*999)
+            CALL SOLVER_LIBRARY_TYPE_SET(SOLVER,SOLVER_CMISS_LIBRARY,err,error,*999)
+
+            !Simple loop for solving vessels energy equation and bioheat equation in tissues
+            NULLIFY(simpleLoop2)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
+            NULLIFY(solvers)
+            CALL SOLVERS_CREATE_START(simpleLoop2,solvers,err,error,*999)
+            CALL SOLVERS_NUMBER_SET(solvers,2,err,error,*999)
+!!!-- E N E R G Y  E Q U A T I O N  V E S S E L S --!!!
+            !Set the first solver to be a linear solver for the advection-diffusion problem
+            NULLIFY(solverAdvectionDiffusion)
+            CALL SOLVERS_SOLVER_GET(solvers,1,solverAdvectionDiffusion,err,error,*999)
+            CALL SOLVER_TYPE_SET(solverAdvectionDiffusion,SOLVER_DYNAMIC_TYPE,err,error,*999)
+            CALL SOLVER_DYNAMIC_ORDER_SET(solverAdvectionDiffusion,SOLVER_DYNAMIC_FIRST_ORDER,err,error,*999)
+            !Set solver defaults
+            CALL SOLVER_DYNAMIC_DEGREE_SET(solverAdvectionDiffusion,SOLVER_DYNAMIC_FIRST_DEGREE,err,error,*999)
+            CALL SOLVER_DYNAMIC_SCHEME_SET(solverAdvectionDiffusion,SOLVER_DYNAMIC_CRANK_NICOLSON_SCHEME,err,error,*999)
+            CALL SOLVER_LIBRARY_TYPE_SET(solverAdvectionDiffusion,SOLVER_CMISS_LIBRARY,err,error,*999)
+!!!-- B I O H E A T --!!!
+            !Set the second solver to be a linear solver for the diffusion problem
+            NULLIFY(solverDiffusion)
+            CALL SOLVERS_SOLVER_GET(SOLVERS,2,solverDiffusion,err,error,*999)
+            CALL SOLVER_TYPE_SET(solverDiffusion,SOLVER_DYNAMIC_TYPE,err,error,*999)
+            CALL SOLVER_DYNAMIC_ORDER_SET(solverDiffusion,SOLVER_DYNAMIC_FIRST_ORDER,err,error,*999)
+            !Set solver defaults
+            CALL SOLVER_DYNAMIC_DEGREE_SET(solverDiffusion,SOLVER_DYNAMIC_FIRST_DEGREE,err,error,*999)
+            CALL SOLVER_DYNAMIC_SCHEME_SET(solverDiffusion,SOLVER_DYNAMIC_CRANK_NICOLSON_SCHEME,err,error,*999)
+            CALL SOLVER_LIBRARY_TYPE_SET(solverDiffusion,SOLVER_CMISS_LIBRARY,err,error,*999)
+          CASE(PROBLEM_SETUP_FINISH_ACTION)
+            NULLIFY(solvers)
+            NULLIFY(cellMLSolver)
+            NULLIFY(simpleLoopCellML1)
+            !Time loop has 3 sub loops, simple loop, while loop and another simple loop
+
+            !Simple loop for cellML solver
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,1,simpleLoopCellML1,err,error,*999)
+            CALL CONTROL_LOOP_SOLVERS_GET(simpleLoopCellML1,solvers,err,error,*999)
+            CALL SOLVERS_CREATE_FINISH(solvers,err,error,*999)
+
+            !Conditional while loop
+            NULLIFY(whileLoopConditional)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,2,whileLoopConditional,err,error,*999)
+            !Flow time loop
+            NULLIFY(timeLoopFlow)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(whileLoopConditional,1,timeLoopFlow,err,error,*999)
+            !Iterative while loop for Flow
+            NULLIFY(iterativeWhileLoop)
+            NULLIFY(solvers)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(timeLoopFlow,1,iterativeWhileLoop,err,error,*999)
+            CALL CONTROL_LOOP_SOLVERS_GET(iterativeWhileLoop,solvers,err,error,*999)
+            CALL SOLVERS_CREATE_FINISH(solvers,err,error,*999)
+
+            !Simple loop for solving vessels energy equation and bioheat equation in tissues
+            NULLIFY(simpleLoop2)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
+            NULLIFY(solvers)
+            CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop2,solvers,err,error,*999)
+            CALL SOLVERS_CREATE_FINISH(solvers,err,error,*999)
+          CASE DEFAULT
+            LOCAL_ERROR="The action type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%ACTION_TYPE,"*",ERR,ERROR))// &
+              & " for a setup type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%SETUP_TYPE,"*",ERR,ERROR))// &
+                & " is invalid for a coupled Navier-Stokes & diffusion & advection-diffusion equation."
+            CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+          END SELECT
+        !Create the solver equations
+        CASE(PROBLEM_SETUP_SOLVER_EQUATIONS_TYPE)
+          SELECT CASE(PROBLEM_SETUP%ACTION_TYPE)
+          CASE(PROBLEM_SETUP_START_ACTION)
+            !Get the control loop and solvers
+            CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
+            NULLIFY(CONTROL_LOOP)
+            CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,err,error,*999)
+
+
+
+
+
+
+
+
+
+            CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,SOLVERS,ERR,ERROR,*999)
+            !
+            !Get the advection-diffusion solver and create the advection-diffusion solver equations
+            CALL SOLVERS_SOLVER_GET(SOLVERS,2,SOLVER_ADVECTION_DIFFUSION,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_CREATE_START(SOLVER_ADVECTION_DIFFUSION,SOLVER_EQUATIONS_ADVECTION_DIFFUSION,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_LINEARITY_TYPE_SET(SOLVER_EQUATIONS_ADVECTION_DIFFUSION,SOLVER_EQUATIONS_LINEAR,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_TIME_DEPENDENCE_TYPE_SET(SOLVER_EQUATIONS_ADVECTION_DIFFUSION, &
+              & SOLVER_EQUATIONS_FIRST_ORDER_DYNAMIC,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_SPARSITY_TYPE_SET(SOLVER_EQUATIONS_ADVECTION_DIFFUSION,SOLVER_SPARSE_MATRICES,ERR,ERROR,*999)
+            !
+            !Get the diffusion solver and create the diffusion solver equations
+            CALL SOLVERS_SOLVER_GET(SOLVERS,3,SOLVER_DIFFUSION,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_CREATE_START(SOLVER_DIFFUSION,SOLVER_EQUATIONS_DIFFUSION,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_LINEARITY_TYPE_SET(SOLVER_EQUATIONS_DIFFUSION,SOLVER_EQUATIONS_LINEAR,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_TIME_DEPENDENCE_TYPE_SET(SOLVER_EQUATIONS_DIFFUSION, &
+              & SOLVER_EQUATIONS_FIRST_ORDER_DYNAMIC,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_SPARSITY_TYPE_SET(SOLVER_EQUATIONS_DIFFUSION,SOLVER_SPARSE_MATRICES,ERR,ERROR,*999)
+            !
+
+          CASE(PROBLEM_SETUP_FINISH_ACTION)
+            !Get the control loop
+            CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
+            CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,ERR,ERROR,*999)
+            CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,SOLVERS,ERR,ERROR,*999)
+            !
+            !Finish the creation of the advection-diffusion solver equations
+            CALL SOLVERS_SOLVER_GET(SOLVERS,2,SOLVER_ADVECTION_DIFFUSION,ERR,ERROR,*999)
+            CALL SOLVER_SOLVER_EQUATIONS_GET(SOLVER_ADVECTION_DIFFUSION,SOLVER_EQUATIONS_ADVECTION_DIFFUSION,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_CREATE_FINISH(SOLVER_EQUATIONS_ADVECTION_DIFFUSION,ERR,ERROR,*999)
+            !
+            !Finish the creation of the diffusion solver equations
+            CALL SOLVERS_SOLVER_GET(SOLVERS,3,SOLVER_DIFFUSION,ERR,ERROR,*999)
+            CALL SOLVER_SOLVER_EQUATIONS_GET(SOLVER_DIFFUSION,SOLVER_EQUATIONS_DIFFUSION,ERR,ERROR,*999)
+            CALL SOLVER_EQUATIONS_CREATE_FINISH(SOLVER_EQUATIONS_DIFFUSION,ERR,ERROR,*999)
+            !
+
+          CASE DEFAULT
+            LOCAL_ERROR="The action type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%ACTION_TYPE,"*",ERR,ERROR))// &
+              & " for a setup type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%SETUP_TYPE,"*",ERR,ERROR))// &
+              & " is invalid for a coupled diffusion & advection-diffusion equation."
+            CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+          END SELECT
+          !Elias \*
+          !Create the CELLML solver equations
+        CASE(PROBLEM_SETUP_CELLML_EQUATIONS_TYPE)
+          SELECT CASE(PROBLEM_SETUP%ACTION_TYPE)
+          CASE(PROBLEM_SETUP_START_ACTION)
+            !Get the control loop
+            CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
+            CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,err,error,*999)
+            IF(PROBLEM%specification(3) == PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE) THEN
+              ! NULLIFY(iterativeWhileLoop)
+              ! CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,1,iterativeWhileLoop,err,error,*999)
+              ! NULLIFY(simpleLoop)
+              ! CALL CONTROL_LOOP_SUB_LOOP_GET(iterativeWhileLoop,1,simpleLoop,err,error,*999)
+              ! CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop,SOLVERS,err,error,*999)
+            ! ELSE
+              CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,SOLVERS,err,error,*999)
+            END IF
+             ! NULLIFY(solver_cellML)
+             NULLIFY(cellMLSolver)
+             NULLIFY(CELLML_EQUATIONS)
+            SELECT CASE(PROBLEM%specification(3))
+            CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
+              CALL SOLVERS_SOLVER_GET(SOLVERS,1,cellMLSolver,err,error,*999)
+              CALL CELLML_EQUATIONS_CREATE_START(cellMLSolver,CELLML_EQUATIONS,err,error,*999)
+              !Set the time dependence
+              CALL CellMLEquations_TimeDependenceTypeSet(CELLML_EQUATIONS,CELLML_EQUATIONS_STATIC,err,error,*999)
+              !Set the linearity
+              CALL CellMLEquations_LinearityTypeSet(CELLML_EQUATIONS,CELLML_EQUATIONS_LINEAR,err,error,*999)
+            CASE DEFAULT
+              localError="Problem subtype "//TRIM(NumberToVString(PROBLEM%specification(3),"*",err,error))// &
+                & " is not valid for cellML equations setup Navier-Stokes equation type of a fluid mechanics problem class."
+              CALL FlagError(localError,err,error,*999)
+            END SELECT
+          CASE(PROBLEM_SETUP_FINISH_ACTION)
+            !Get the control loop
+            CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
+            CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,err,error,*999)
+            IF(PROBLEM%specification(3) == PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE) THEN
+            !   NULLIFY(iterativeWhileLoop)
+            !   CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,1,iterativeWhileLoop,err,error,*999)
+            !   NULLIFY(simpleLoop)
+            !   CALL CONTROL_LOOP_SUB_LOOP_GET(iterativeWhileLoop,1,simpleLoop,err,error,*999)
+            !   CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop,SOLVERS,err,error,*999)
+            ! ELSE
+              CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,SOLVERS,err,error,*999)
+            END IF
+            NULLIFY(cellMLSolver)
+            NULLIFY(CELLML_EQUATIONS)
+            SELECT CASE(PROBLEM%specification(3))
+            CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
+              CALL SOLVERS_SOLVER_GET(SOLVERS,1,cellMLSolver,err,error,*999)
+              CALL SOLVER_CELLML_EQUATIONS_GET(cellMLSolver,CELLML_EQUATIONS,err,error,*999)
+              CALL CELLML_EQUATIONS_CREATE_FINISH(CELLML_EQUATIONS,err,error,*999)
+            CASE DEFAULT
+              localError="The third problem specification of "// &
+                & TRIM(NumberToVString(PROBLEM%specification(3),"*",err,error))// &
+                & " is not valid for cellML equations setup Navier-Stokes fluid mechanics problem."
+              CALL FlagError(localError,err,error,*999)
+            END SELECT
+
           CASE DEFAULT
             localError="The action type of "//TRIM(NumberToVString(PROBLEM_SETUP%ACTION_TYPE,"*",err,error))// &
               & " for a setup type of "//TRIM(NumberToVString(PROBLEM_SETUP%SETUP_TYPE,"*",err,error))// &
@@ -556,7 +874,7 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Sets up the diffusion-diffusion problem pre-solve.
+  !>Sets up the coupled Navier_stokes & diffusion & advection-diffusion problem pre-solve.
   SUBROUTINE NavierStokesDiffAdvDiff_PreSolve(CONTROL_LOOP,SOLVER,ERR,ERROR,*)
 
     !Argument variables

@@ -315,9 +315,9 @@ CONTAINS
       & iterativeWhileLoop,timeLoopFlow
     TYPE(SOLVER_TYPE), POINTER :: SOLVER_DIFFUSION, SOLVER_ADVECTION_DIFFUSION,cellMLSolver,solverAdvectionDiffusion, &
       & solverDiffusion, solver
-    TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: SOLVER_EQUATIONS_DIFFUSION, SOLVER_EQUATIONS_ADVECTION_DIFFUSION
+    TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: SOLVER_EQUATIONS_DIFFUSION,SOLVER_EQUATIONS_ADVECTION_DIFFUSION,solverEquations
     TYPE(SOLVERS_TYPE), POINTER :: SOLVERS
-    TYPE(CELLML_EQUATIONS_TYPE), POINTER :: CELLML_EQUATIONS
+    TYPE(CELLML_EQUATIONS_TYPE), POINTER :: CELLML_EQUATIONS,cellMLEquations
     TYPE(VARYING_STRING) :: LOCAL_ERROR,localError
 
     ENTERS("NavierStokesDiffAdvDiff_ProblemSetup",ERR,ERROR,*999)
@@ -724,59 +724,111 @@ CONTAINS
         CASE(PROBLEM_SETUP_SOLVER_EQUATIONS_TYPE)
           SELECT CASE(PROBLEM_SETUP%ACTION_TYPE)
           CASE(PROBLEM_SETUP_START_ACTION)
+            !Control loops have 3 solvers and solvers have 4 solvers in total plus one cellML.
+            !The first simple loop has a cellML evaluator. see CASE(PROBLEM_SETUP_CELLML_EQUATIONS_TYPE).
+            !Get the solver for each solvers of control loops and create solver equations for them
+
             !Get the control loop and solvers
             CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
             NULLIFY(CONTROL_LOOP)
             CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,err,error,*999)
+            !Flow solvers
+            NULLIFY(whileLoopConditional)
+            NULLIFY(iterativeWhileLoop)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,2,whileLoopConditional,err,error,*999)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(whileLoopConditional,1,timeLoopFlow,err,error,*999)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(timeLoopFlow,1,iterativeWhileLoop,err,error,*999)
+            NULLIFY(solvers)
+            CALL CONTROL_LOOP_SOLVERS_GET(iterativeWhileLoop,solvers,err,error,*999)
+  !!!-- C H A R A C T E R I S T I C --!!!
+            NULLIFY(solver)
+            NULLIFY(solverEquations)
+            CALL SOLVERS_SOLVER_GET(solvers,1,solver,err,error,*999)
+            CALL SOLVER_EQUATIONS_CREATE_START(solver,solverEquations,err,error,*999)
+            CALL SOLVER_EQUATIONS_LINEARITY_TYPE_SET(solverEquations,SOLVER_EQUATIONS_NONLINEAR,err,error,*999)
+            CALL SOLVER_EQUATIONS_TIME_DEPENDENCE_TYPE_SET(solverEquations,SOLVER_EQUATIONS_STATIC,err,error,*999)
+            CALL SOLVER_EQUATIONS_SPARSITY_TYPE_SET(solverEquations,SOLVER_SPARSE_MATRICES,err,error,*999)
+            NULLIFY(solver)
+            NULLIFY(solverEquations)
+  !!!-- N A V I E R   S T O K E S --!!!
+            CALL SOLVERS_SOLVER_GET(solvers,2,solver,err,error,*999)
+            CALL SOLVER_EQUATIONS_CREATE_START(solver,solverEquations,err,error,*999)
+            CALL SOLVER_EQUATIONS_LINEARITY_TYPE_SET(solverEquations,SOLVER_EQUATIONS_NONLINEAR,err,error,*999)
+            CALL SOLVER_EQUATIONS_TIME_DEPENDENCE_TYPE_SET(solverEquations,SOLVER_EQUATIONS_FIRST_ORDER_DYNAMIC,err,error,*999)
+            CALL SOLVER_EQUATIONS_SPARSITY_TYPE_SET(solverEquations,SOLVER_SPARSE_MATRICES,err,error,*999)
 
-
-
-
-
-
-
-
-
-            CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,SOLVERS,ERR,ERROR,*999)
-            !
+            NULLIFY(simpleLoop2)
+            NULLIFY(solvers)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
+            CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,solvers,err,error,*999)
+            !It has two solvers, one for solvine energy equation for vessels and the other one two solve bioheat equation in tissues
+!!!-- E N E R G Y  E Q U A T I O N  V E S S E L S --!!!
             !Get the advection-diffusion solver and create the advection-diffusion solver equations
-            CALL SOLVERS_SOLVER_GET(SOLVERS,2,SOLVER_ADVECTION_DIFFUSION,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_CREATE_START(SOLVER_ADVECTION_DIFFUSION,SOLVER_EQUATIONS_ADVECTION_DIFFUSION,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_LINEARITY_TYPE_SET(SOLVER_EQUATIONS_ADVECTION_DIFFUSION,SOLVER_EQUATIONS_LINEAR,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_TIME_DEPENDENCE_TYPE_SET(SOLVER_EQUATIONS_ADVECTION_DIFFUSION, &
-              & SOLVER_EQUATIONS_FIRST_ORDER_DYNAMIC,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_SPARSITY_TYPE_SET(SOLVER_EQUATIONS_ADVECTION_DIFFUSION,SOLVER_SPARSE_MATRICES,ERR,ERROR,*999)
-            !
+            NULLIFY(solver)
+            NULLIFY(solverEquations)
+            CALL SOLVERS_SOLVER_GET(solvers,1,solver,err,error,*999)
+            CALL SOLVER_EQUATIONS_CREATE_START(solver,solverEquations,err,error,*999)
+            CALL SOLVER_EQUATIONS_LINEARITY_TYPE_SET(solverEquations,SOLVER_EQUATIONS_LINEAR,err,error,*999)
+            CALL SOLVER_EQUATIONS_TIME_DEPENDENCE_TYPE_SET(solverEquations,SOLVER_EQUATIONS_FIRST_ORDER_DYNAMIC,err,error,*999)
+            CALL SOLVER_EQUATIONS_SPARSITY_TYPE_SET(solverEquations,SOLVER_SPARSE_MATRICES,err,error,*999)
+!!!-- B I O H E A T --!!!
             !Get the diffusion solver and create the diffusion solver equations
-            CALL SOLVERS_SOLVER_GET(SOLVERS,3,SOLVER_DIFFUSION,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_CREATE_START(SOLVER_DIFFUSION,SOLVER_EQUATIONS_DIFFUSION,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_LINEARITY_TYPE_SET(SOLVER_EQUATIONS_DIFFUSION,SOLVER_EQUATIONS_LINEAR,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_TIME_DEPENDENCE_TYPE_SET(SOLVER_EQUATIONS_DIFFUSION, &
-              & SOLVER_EQUATIONS_FIRST_ORDER_DYNAMIC,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_SPARSITY_TYPE_SET(SOLVER_EQUATIONS_DIFFUSION,SOLVER_SPARSE_MATRICES,ERR,ERROR,*999)
-            !
-
+            NULLIFY(solver)
+            NULLIFY(solverEquations)
+            CALL SOLVERS_SOLVER_GET(solvers,2,solver,err,error,*999)
+            CALL SOLVER_EQUATIONS_CREATE_START(solver,solverEquations,err,error,*999)
+            CALL SOLVER_EQUATIONS_LINEARITY_TYPE_SET(solverEquations,SOLVER_EQUATIONS_LINEAR,err,error,*999)
+            CALL SOLVER_EQUATIONS_TIME_DEPENDENCE_TYPE_SET(solverEquations,SOLVER_EQUATIONS_FIRST_ORDER_DYNAMIC,err,error,*999)
+            CALL SOLVER_EQUATIONS_SPARSITY_TYPE_SET(solverEquations,SOLVER_SPARSE_MATRICES,err,error,*999)
           CASE(PROBLEM_SETUP_FINISH_ACTION)
             !Get the control loop
             CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
+            NULLIFY(CONTROL_LOOP)
             CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,ERR,ERROR,*999)
-            CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,SOLVERS,ERR,ERROR,*999)
-            !
-            !Finish the creation of the advection-diffusion solver equations
-            CALL SOLVERS_SOLVER_GET(SOLVERS,2,SOLVER_ADVECTION_DIFFUSION,ERR,ERROR,*999)
-            CALL SOLVER_SOLVER_EQUATIONS_GET(SOLVER_ADVECTION_DIFFUSION,SOLVER_EQUATIONS_ADVECTION_DIFFUSION,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_CREATE_FINISH(SOLVER_EQUATIONS_ADVECTION_DIFFUSION,ERR,ERROR,*999)
-            !
-            !Finish the creation of the diffusion solver equations
-            CALL SOLVERS_SOLVER_GET(SOLVERS,3,SOLVER_DIFFUSION,ERR,ERROR,*999)
-            CALL SOLVER_SOLVER_EQUATIONS_GET(SOLVER_DIFFUSION,SOLVER_EQUATIONS_DIFFUSION,ERR,ERROR,*999)
-            CALL SOLVER_EQUATIONS_CREATE_FINISH(SOLVER_EQUATIONS_DIFFUSION,ERR,ERROR,*999)
-            !
+            !Flow solvers
+            NULLIFY(whileLoopConditional)
+            NULLIFY(iterativeWhileLoop)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,2,whileLoopConditional,err,error,*999)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(whileLoopConditional,1,timeLoopFlow,err,error,*999)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(timeLoopFlow,1,iterativeWhileLoop,err,error,*999)
+            NULLIFY(solvers)
+            CALL CONTROL_LOOP_SOLVERS_GET(iterativeWhileLoop,solvers,err,error,*999)
+  !!!-- C H A R A C T E R I S T I C --!!!
+            NULLIFY(solver)
+            NULLIFY(solverEquations)
+            CALL SOLVERS_SOLVER_GET(solvers,1,solver,err,error,*999)
+            CALL SOLVER_SOLVER_EQUATIONS_GET(solver,solverEquations,err,error,*999)
+            CALL SOLVER_EQUATIONS_CREATE_FINISH(solverEquations,err,error,*999)
+  !!!-- N A V I E R   S T O K E S --!!!
+            NULLIFY(solver)
+            NULLIFY(solverEquations)
+            CALL SOLVERS_SOLVER_GET(solvers,2,solver,err,error,*999)
+            CALL SOLVER_SOLVER_EQUATIONS_GET(solver,solverEquations,err,error,*999)
+            CALL SOLVER_EQUATIONS_CREATE_FINISH(solverEquations,err,error,*999)
 
+            NULLIFY(simpleLoop2)
+            NULLIFY(solvers)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
+            CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,solvers,err,error,*999)
+            !It has two solvers, one for solvine energy equation for vessels and the other one two solve bioheat equation in tissues
+  !!!-- E N E R G Y  E Q U A T I O N  V E S S E L S --!!!
+            !Get the advection-diffusion solver and create the advection-diffusion solver equations
+            NULLIFY(solver)
+            NULLIFY(solverEquations)
+            CALL SOLVERS_SOLVER_GET(solvers,1,solver,err,error,*999)
+            CALL SOLVER_SOLVER_EQUATIONS_GET(solver,solverEquations,err,error,*999)
+            CALL SOLVER_EQUATIONS_CREATE_FINISH(solverEquations,err,error,*999)
+  !!!-- B I O H E A T --!!!
+            !Get the diffusion solver and create the diffusion solver equations
+            NULLIFY(solver)
+            NULLIFY(solverEquations)
+            CALL SOLVERS_SOLVER_GET(solvers,2,solver,err,error,*999)
+            CALL SOLVER_SOLVER_EQUATIONS_GET(solver,solverEquations,err,error,*999)
+            CALL SOLVER_EQUATIONS_CREATE_FINISH(solverEquations,err,error,*999)
           CASE DEFAULT
             LOCAL_ERROR="The action type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%ACTION_TYPE,"*",ERR,ERROR))// &
               & " for a setup type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%SETUP_TYPE,"*",ERR,ERROR))// &
-              & " is invalid for a coupled diffusion & advection-diffusion equation."
+              & " is invalid for a coupled Navier-Stokes & diffusion & advection-diffusion equation."
             CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
           END SELECT
           !Elias \*
@@ -786,68 +838,65 @@ CONTAINS
           CASE(PROBLEM_SETUP_START_ACTION)
             !Get the control loop
             CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
+            NULLIFY(CONTROL_LOOP)
             CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,err,error,*999)
-            IF(PROBLEM%specification(3) == PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE) THEN
-              ! NULLIFY(iterativeWhileLoop)
-              ! CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,1,iterativeWhileLoop,err,error,*999)
-              ! NULLIFY(simpleLoop)
-              ! CALL CONTROL_LOOP_SUB_LOOP_GET(iterativeWhileLoop,1,simpleLoop,err,error,*999)
-              ! CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop,SOLVERS,err,error,*999)
-            ! ELSE
-              CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,SOLVERS,err,error,*999)
+            IF(PROBLEM%specification(3) == PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE) THEN
+              NULLIFY(simpleLoopCellML1)
+              NULLIFY(solvers)
+              CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,1,simpleLoopCellML1,err,error,*999)
+              CALL CONTROL_LOOP_SOLVERS_GET(simpleLoopCellML1,solvers,err,error,*999)
             END IF
-             ! NULLIFY(solver_cellML)
-             NULLIFY(cellMLSolver)
-             NULLIFY(CELLML_EQUATIONS)
+            ! create cellML equations for controling equations
+            NULLIFY(solver)
+            NULLIFY(cellMLEquations)
             SELECT CASE(PROBLEM%specification(3))
-            CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
-              CALL SOLVERS_SOLVER_GET(SOLVERS,1,cellMLSolver,err,error,*999)
-              CALL CELLML_EQUATIONS_CREATE_START(cellMLSolver,CELLML_EQUATIONS,err,error,*999)
+            CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+              CALL SOLVERS_SOLVER_GET(solvers,1,solver,err,error,*999)
+              CALL CELLML_EQUATIONS_CREATE_START(solver,cellMLEquations,err,error,*999)
               !Set the time dependence
-              CALL CellMLEquations_TimeDependenceTypeSet(CELLML_EQUATIONS,CELLML_EQUATIONS_STATIC,err,error,*999)
+              CALL CellMLEquations_TimeDependenceTypeSet(cellMLEquations,CELLML_EQUATIONS_STATIC,err,error,*999)
               !Set the linearity
-              CALL CellMLEquations_LinearityTypeSet(CELLML_EQUATIONS,CELLML_EQUATIONS_LINEAR,err,error,*999)
+              CALL CellMLEquations_LinearityTypeSet(cellMLEquations,CELLML_EQUATIONS_LINEAR,err,error,*999)
             CASE DEFAULT
               localError="Problem subtype "//TRIM(NumberToVString(PROBLEM%specification(3),"*",err,error))// &
-                & " is not valid for cellML equations setup Navier-Stokes equation type of a fluid mechanics problem class."
+                & " is not valid for cellML equations setup of controling equations of Navier-Stokes diffusion advection-diffusion."
               CALL FlagError(localError,err,error,*999)
             END SELECT
+
           CASE(PROBLEM_SETUP_FINISH_ACTION)
             !Get the control loop
             CONTROL_LOOP_ROOT=>PROBLEM%CONTROL_LOOP
+            NULLIFY(CONTROL_LOOP)
             CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,err,error,*999)
-            IF(PROBLEM%specification(3) == PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE) THEN
-            !   NULLIFY(iterativeWhileLoop)
-            !   CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,1,iterativeWhileLoop,err,error,*999)
-            !   NULLIFY(simpleLoop)
-            !   CALL CONTROL_LOOP_SUB_LOOP_GET(iterativeWhileLoop,1,simpleLoop,err,error,*999)
-            !   CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop,SOLVERS,err,error,*999)
-            ! ELSE
-              CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,SOLVERS,err,error,*999)
+            IF(PROBLEM%specification(3) == PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE) THEN
+              NULLIFY(simpleLoopCellML1)
+              NULLIFY(solvers)
+              CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,1,simpleLoopCellML1,err,error,*999)
+              CALL CONTROL_LOOP_SOLVERS_GET(simpleLoopCellML1,solvers,err,error,*999)
             END IF
-            NULLIFY(cellMLSolver)
-            NULLIFY(CELLML_EQUATIONS)
+            NULLIFY(solver)
+            NULLIFY(cellMLEquations)
             SELECT CASE(PROBLEM%specification(3))
-            CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
-              CALL SOLVERS_SOLVER_GET(SOLVERS,1,cellMLSolver,err,error,*999)
-              CALL SOLVER_CELLML_EQUATIONS_GET(cellMLSolver,CELLML_EQUATIONS,err,error,*999)
-              CALL CELLML_EQUATIONS_CREATE_FINISH(CELLML_EQUATIONS,err,error,*999)
+            CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+              CALL SOLVERS_SOLVER_GET(solvers,1,solver,err,error,*999)
+              CALL SOLVER_CELLML_EQUATIONS_GET(solver,cellMLEquations,err,error,*999)
+              CALL CELLML_EQUATIONS_CREATE_FINISH(cellMLEquations,err,error,*999)
             CASE DEFAULT
               localError="The third problem specification of "// &
                 & TRIM(NumberToVString(PROBLEM%specification(3),"*",err,error))// &
-                & " is not valid for cellML equations setup Navier-Stokes fluid mechanics problem."
+                & " is not valid for cellML equations setup of controling equations of Navier-Stokes diffusion advection-diffusion."
               CALL FlagError(localError,err,error,*999)
             END SELECT
 
           CASE DEFAULT
             localError="The action type of "//TRIM(NumberToVString(PROBLEM_SETUP%ACTION_TYPE,"*",err,error))// &
               & " for a setup type of "//TRIM(NumberToVString(PROBLEM_SETUP%SETUP_TYPE,"*",err,error))// &
-              & " is invalid for a CellML setup for a 1D Navier-Stokes equation."
+              & " is invalid for a CellML setup of controling equations of Navier-Stokes diffusion advection-diffusion."
             CALL FlagError(localError,err,error,*999)
           END SELECT    !Elias */
         CASE DEFAULT
           LOCAL_ERROR="The setup type of "//TRIM(NUMBER_TO_VSTRING(PROBLEM_SETUP%SETUP_TYPE,"*",ERR,ERROR))// &
-            & " is invalid for a coupled diffusion & advection-diffusion equation."
+            & " is invalid for a coupled Navier-Stokes & diffusion & advection-diffusion equation."
           CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
         END SELECT
 
@@ -856,7 +905,7 @@ CONTAINS
       !-----------------------------------------------------------------
       CASE DEFAULT
         LOCAL_ERROR="The problem subtype of "//TRIM(NUMBER_TO_VSTRING(PROBLEM%SPECIFICATION(3),"*",ERR,ERROR))// &
-          & " does not equal a coupled source diffusion & advection-diffusion equation subtype."
+          & " does not equal a coupled Navier-Stokes source diffusion & advection-diffusion equation subtype."
         CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
 
       END SELECT
@@ -874,7 +923,7 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Sets up the coupled Navier_stokes & diffusion & advection-diffusion problem pre-solve.
+  !>Sets up the coupled Navier-Stokes & diffusion & advection-diffusion problem pre-solve.
   SUBROUTINE NavierStokesDiffAdvDiff_PreSolve(CONTROL_LOOP,SOLVER,ERR,ERROR,*)
 
     !Argument variables
@@ -890,41 +939,26 @@ CONTAINS
     ENTERS("NavierStokesDiffAdvDiff_PreSolve",ERR,ERROR,*999)
 
     IF(ASSOCIATED(CONTROL_LOOP)) THEN
-      IF(ASSOCIATED(SOLVER)) THEN
+      IF(ASSOCIATED(solver)) THEN
         IF(ASSOCIATED(CONTROL_LOOP%PROBLEM)) THEN
           IF(.NOT.ALLOCATED(control_loop%problem%specification)) THEN
             CALL FlagError("Problem specification is not allocated.",err,error,*999)
           ELSE IF(SIZE(control_loop%problem%specification,1)<3) THEN
-            CALL FlagError("Problem specification must have three entries for a diffusion-advection diffusion problem.", &
-              & err,error,*999)
+            CALL FlagError("Problem specification must have three entries for a Navier-Stokes & diffusion advection-diffusion &
+              & problem.",err,error,*999)
           END IF
           SELECT CASE(CONTROL_LOOP%PROBLEM%SPECIFICATION(3))
-            CASE(PROBLEM_COUPLED_SOURCE_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
-
-              IF(SOLVER%GLOBAL_NUMBER==1) THEN
-                !copy current value of concentration_one to another variable
-                CALL AdvectionDiffusion_PreSolveStoreCurrentSoln(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-                !Set source term to be updated value of concentration_two
-                !CALL ADVECTION_DIFFUSION_EQUATION_PRE_SOLVE_GET_SOURCE_VALUE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-
-                !Update indpendent data fields
-!                 CALL WRITE_STRING(GENERAL_OUTPUT_TYPE,"Read in vector data... ",ERR,ERROR,*999)
-!                 CALL ADVECTION_DIFFUSION_PRE_SOLVE_UPDATE_INPUT_DATA(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-
-              ELSE IF(SOLVER%GLOBAL_NUMBER==2) THEN
-                !copy current value of concentration_one to another variable
-                CALL Diffusion_PreSolveStoreCurrentSolution(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-                !compute value of constant source term - evaluated from lamdba*(0.5*(c_1^{t+1}+c_1^{t}) - c_2^{t})
-                !CALL DIFFUSION_EQUATION_PRE_SOLVE_GET_SOURCE_VALUE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-              ENDIF
-            CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
-              !Do nothing
-              ! CALL NavierStokesGeometric_Intersection(CONTROL_LOOP,err,error,*999) !Elias
-              CALL NavierStokesDiffAdvDiff_UpdateParameters(CONTROL_LOOP,solver,err,error,*999) !Update Shivering and T_skin
-            CASE DEFAULT
-              LOCAL_ERROR="Problem subtype "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(3),"*",ERR,ERROR))// &
-                & " is not valid for a diffusion & advection-diffusion type of a multi physics problem class."
-              CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+          CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+            !Update Tskin, Tcore and controlling equations
+            CALL NavierStokesDiffAdvDiff_UpdateParameters(CONTROL_LOOP,solver,err,error,*999) !Update Shivering and T_skin
+          CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
+            !Do nothing
+            ! CALL NavierStokesGeometric_Intersection(CONTROL_LOOP,err,error,*999) !Elias
+            CALL NavierStokesDiffAdvDiff_UpdateParameters(CONTROL_LOOP,solver,err,error,*999) !Update Shivering and T_skin
+          CASE DEFAULT
+            LOCAL_ERROR="Problem subtype "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(3),"*",ERR,ERROR))// &
+              & " is not valid for a coupled Navier-Stokes & diffusion & advection-diffusion type of a multi physics problem class."
+            CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
           END SELECT
         ELSE
           CALL FlagError("Problem is not associated.",ERR,ERROR,*999)
@@ -984,288 +1018,298 @@ CONTAINS
     !
     ENTERS("NavierStokesDiffAdvDiff_UpdateParameters",ERR,ERROR,*999)
 
-    IF(SOLVER%GLOBAL_NUMBER==1) THEN
-    !
-    !   !Update skin temperature !Elias */
-      NULLIFY(solverDiffusion)
-      NULLIFY(solverEquationsDiffusion)
+    SELECT CASE(CONTROL_LOOP%PROBLEM%SPECIFICATION(3))
+    CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
 
-      NULLIFY(solverMappingDiffusion)
+      IF(SOLVER%GLOBAL_NUMBER==1) THEN
+      !
+      !   !Update skin temperature !Elias */
+        NULLIFY(solverDiffusion)
+        NULLIFY(solverEquationsDiffusion)
 
-      !Get the equations sets, dependent and geometric fields.
-      CALL SOLVERS_SOLVER_GET(SOLVER%SOLVERS,3,solverDiffusion,err,error,*999)
-      CALL Solver_SolverEquationsGet(solverDiffusion,solverEquationsDiffusion,err,error,*999)
+        NULLIFY(solverMappingDiffusion)
 
-      CALL SolverEquations_SolverMappingGet(solverEquationsDiffusion,solverMappingDiffusion,err,error,*999)
-      NULLIFY(equationsSetDiffusion)
+        !Get the equations sets, dependent and geometric fields.
+        CALL SOLVERS_SOLVER_GET(SOLVER%SOLVERS,3,solverDiffusion,err,error,*999)
+        CALL Solver_SolverEquationsGet(solverDiffusion,solverEquationsDiffusion,err,error,*999)
 
-      CALL SolverMapping_EquationsSetGet(solverMappingDiffusion,1,equationsSetDiffusion,err,error,*999)
-      NULLIFY(dependentField)
-      NULLIFY(independentField)
-      NULLIFY(sourceField)
-      !Get blood temperature
-      CALL EquationsSet_DependentFieldGet(equationsSetDiffusion,dependentField,err,error,*999)
-      CALL EquationsSet_SourceFieldGet(equationsSetDiffusion,sourceField,err,error,*999)
-      !Get the independent field where T_skin and other parameters are stored
-      CALL EquationsSet_IndependentFieldGet(equationsSetDiffusion,independentField,err,error,*999)
-      ! geometricField=>dependentField%geometric_field
-      CALL Field_GeometricGeneralFieldGet(dependentField,geometricField,dependentGeometry,err,error,*999)
+        CALL SolverEquations_SolverMappingGet(solverEquationsDiffusion,solverMappingDiffusion,err,error,*999)
+        NULLIFY(equationsSetDiffusion)
 
-
-      IF(.NOT.ASSOCIATED(geometricField)) CALL FlagError("Field is not associated.",err,error,*999)
-      IF(.NOT.geometricField%FIELD_FINISHED) THEN
-        localError="Field number "//TRIM(NumberToVString(geometricField%USER_NUMBER,"*",err,error))//" has not been finished."
-        CALL FlagError(localError,err,error,*999)
-      ENDIF
-      IF(geometricField%TYPE/=FIELD_GEOMETRIC_TYPE) THEN
-        localError="Field number "//TRIM(NumberToVString(geometricField%USER_NUMBER,"*",err,error))//" is not a geometric field."
-        CALL FlagError(localError,err,error,*999)
-      ENDIF
-      IF(.NOT.ASSOCIATED(geometricField%GEOMETRIC_FIELD_PARAMETERS)) THEN
-        localError="Geometric parameters are not associated for field number "// &
-          & TRIM(NumberToVString(geometricField%USER_NUMBER,"*",err,error))//"."
-        CALL FlagError(localError,err,error,*999)
-      ENDIF
-
-      NULLIFY(coordinateSystem)
-      NULLIFY(interpolationParameters)
-      NULLIFY(interpolatedPoint)
-      NULLIFY(interpolatedPointMetrics)
-      CALL Field_CoordinateSystemGet(geometricField,coordinateSystem,err,error,*999)
-      IF(coordinateSystem%NUMBER_OF_DIMENSIONS==3) THEN !only calculate Skin temperature if the body is in 3D
-        CALL Field_InterpolationParametersInitialise(geometricField,interpolationParameters,err,error,*999)
-        CALL Field_InterpolatedPointsInitialise(interpolationParameters,interpolatedPoint,err,error,*999)
-        CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoint,interpolatedPointMetrics,err,error,*999)
-        !Get basis type for the first component of the mesh defined with this geometric field
-        NULLIFY(decomposition)
-        CALL Field_DecompositionGet(geometricField,decomposition,err,error,*999)
-        NULLIFY(decompositionTopology)
-        CALL Decomposition_TopologyGet(decomposition,decompositionTopology,err,error,*999)
-        NULLIFY(decompositionElements)
-        CALL DecompositionTopology_ElementsGet(decompositionTopology,decompositionElements,err,error,*999)
-        NULLIFY(decompositionFaces)
-        CALL DecompositionTopology_FacesGet(decompositionTopology,decompositionFaces,err,error,*999)
-        NULLIFY(domain)
-        CALL Decomposition_DomainGet(decomposition,0,domain,err,error,*999)
-        NULLIFY(domainTopology)
-        CALL Domain_TopologyGet(domain,domainTopology,err,error,*999)
-        NULLIFY(domainFaces)
-        CALL DomainTopology_FacesGet(domainTopology,domainFaces,err,error,*999)
-        NULLIFY(domainElements)
-        CALL DomainTopology_ElementsGet(domainTopology,domainElements,err,error,*999)
-
-        NULLIFY(basis)
-        !Allocate Gauss points
-        ! order=2
-        ! maxNumberOfGauss=order*order*order
-        ! ALLOCATE(gaussPoints(3,maxNumberOfGauss),STAT=err)
-        ! IF(err/=0) CALL FlagError("Could not allocated gauss points.",err,error,*999)
-        ! ALLOCATE(gaussWeights(maxNumberOfGauss),STAT=err)
-        ! IF(err/=0) CALL FlagError("Could not allocated gauss weights.",err,error,*999)
-        !Calculate Gauss points
-        ! CALL Basis_GaussPointsCalculate(basis,order,3,numberOfGaussPoints,gaussPoints,gaussWeights,err,error,*999)
-        ! decompositiontopology%elements%number_of_elements
-         !decompositiontopology%elements%elements(1)%element_faces
-
-        !==================== Calculate average skin temperature ===================
-        T_skin=0.0_DP
-        counter = 0 ! to see how many faces are boundary faces
-        !Loop over the boundary faces
-        DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
-          DO faceIdx=1,SIZE(decompositionTopology%ELEMENTS%ELEMENTS(elemIdx)%ELEMENT_FACES)
-            faceNumber=decompositiontopology%elements%elements(elemIdx)%element_faces(faceIdx)
-            face=>domainFaces%faces(faceNumber)
-            IF (face%boundary_face) THEN
-              counter = counter + 1
-              basis=>face%basis
-              IF(.NOT.ASSOCIATED(basis)) THEN
-                CALL FlagError("basis is not associated.",err,error,*999)
-              END IF
-              quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-              IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-                CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
-              END IF
-
-              CALL Field_InterpolationParametersFaceGet(FIELD_VALUES_SET_TYPE,faceNumber, &
-                & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-              DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-                ! CALL Field_InterpolateXi(FIRST_PART_DERIV,gaussPoints(1:3,gaussPointIdx),interpolatedPoint(FIELD_U_VARIABLE_TYPE)%PTR, &
-                CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-                  & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                !   & err,error,*999)
-                CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_AREA_TYPE, &
-                  & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-                DO nodeIdx=1,basis%NUMBER_OF_NODES
-                  nodeNumber=face%NODES_IN_FACE(nodeIdx)
-                  DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-
-                    globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
-                    CALL Field_ParameterSetGetNode(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,1, &
-                      & globalDof,1,Tn,err,error,*999)
-                    ! Tn=dependent_field%variables(1)%parameter_sets%set_type(1)%ptr%parameters%cmiss%datadp(1)
-
-                    ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-                    phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-                    T_skin=T_skin+Tn*Phim* &
-                      & InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
-                  END DO !derivIdx
-                END DO !nodeIdx
-                ! area=area+InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
-              ENDDO !gaussIdx
-            END IF
-          ENDDO !faceIdx
-        END DO !elemIdx
-
-        area=geometricField%GEOMETRIC_FIELD_PARAMETERS%surfaceArea
-        ! print*, 'area = ',area
-        T_skin = T_skin/area
-        ! print*, 'Tsk = ', T_skin, counter
+        CALL SolverMapping_EquationsSetGet(solverMappingDiffusion,1,equationsSetDiffusion,err,error,*999)
+        NULLIFY(dependentField)
+        NULLIFY(independentField)
+        NULLIFY(sourceField)
+        !Get blood temperature
+        CALL EquationsSet_DependentFieldGet(equationsSetDiffusion,dependentField,err,error,*999)
+        CALL EquationsSet_SourceFieldGet(equationsSetDiffusion,sourceField,err,error,*999)
+        !Get the independent field where T_skin and other parameters are stored
+        CALL EquationsSet_IndependentFieldGet(equationsSetDiffusion,independentField,err,error,*999)
+        ! geometricField=>dependentField%geometric_field
+        CALL Field_GeometricGeneralFieldGet(dependentField,geometricField,dependentGeometry,err,error,*999)
 
 
-        IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
-          CALL MPI_ALLREDUCE(MPI_IN_PLACE,T_skin, &
-          & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
-          CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
-        END IF
-        ! CALL Field_ParameterSetUpdateElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,T_skin,ERR,ERROR,*999)
-        CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,T_skin,err,error,*999)
-        ! print*, 'afterMPI',T_skin
-       ! ================================================================================
-
-        ! print*, field%GEOMETRIC_FIELD_PARAMETERS%surfaceArea
-
-        ! ===============================================================================
-        ! Calculate total muscle volume (for each partition first)
-        muscleVolume = 0.0_DP
-        DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
-          !CALL Field_ParameterSetGetElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,elemIdx,3, &
-            ! & organType,err,error,*999)
-          CALL Field_ParameterSetGetLocalElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
-           & elemIdx,3,organType,err,error,*999)
-          IF(organType==1) THEN ! TODO change 1 to muscle type
-            muscleVolume=muscleVolume+geometricField%GEOMETRIC_FIELD_PARAMETERS%VOLUMES(elemIdx)
-          ENDIF
-        ENDDO
-
-        ! Collect and sum the total muscle volumes of each partition to obtain total muscle volume. vol=SUM(vol_partition)
-        IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
-          CALL MPI_ALLREDUCE(MPI_IN_PLACE,muscleVolume, &
-          & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
-          CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
-        END IF
-
-        ! Update the muscle total volume in independent field.
-        CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
-          & 4,muscleVolume,err,error,*999)
-        ! ===============================================================================
-        CALL Field_ParameterSetUpdateStart(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
-        CALL Field_ParameterSetUpdateFinish(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
-
-
-        ! ===================== obtain T_core =======================
-        ! TODO Should it be rectal temperature only??
-        T_core=0.0_DP
-        DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
-          basis=>domainElements%elements(elemIdx)%basis
-          IF(.NOT.ASSOCIATED(basis)) THEN
-            CALL FlagError("basis is not associated.",err,error,*999)
-          END IF
-          quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-          IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-            CALL FlagError("Element basis default quadrature scheme is not associated.",err,error,*999)
-          END IF
-
-          CALL Field_InterpolationParametersElementGet(FIELD_VALUES_SET_TYPE,elemIdx, &
-            & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-          DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-            CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-              & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-
-            CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_VOLUME_TYPE, &
-              & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-            DO nodeIdx=1,basis%NUMBER_OF_NODES
-              nodeNumber=domainElements%elements(elemIdx)%element_nodes(nodeIdx)
-              DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-
-                globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
-                CALL Field_ParameterSetGetNode(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,1, &
-                  & globalDof,1,Tn,err,error,*999)
-
-                ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-                phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-                T_core=T_core+Tn*phim* &
-                  & InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
-              END DO !derivIdx
-            END DO !nodeIdx
-          ENDDO !gaussIdx
-        ENDDO !elementIdx
-
-        T_core=T_core/muscleVolume
-
-        IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
-          CALL MPI_ALLREDUCE(MPI_IN_PLACE,T_core, &
-          & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
-          CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
-        END IF
-
-        CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,2,T_core,err,error,*999)
-
-        ! TODO: You need to print some values on terminal to check them. Also, you need to exprot them into a file.
-        myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
-        ! CALL Field_ParameterSetGetElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,3, &
-        !   & c_param,err,error,*999)
-
-        IF(myComputationalNodeNumber==0)THEN
-          CALL Field_ParameterSetGetLocalElement(sourceField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
-           & 1,1,sourceValue,err,error,*999)
-          print*, "Tskin,Tcore=",T_skin,T_core
-          open(1,file='data',status='old')
-          write(1,*) T_skin,T_core,sourceValue
+        IF(.NOT.ASSOCIATED(geometricField)) CALL FlagError("Field is not associated.",err,error,*999)
+        IF(.NOT.geometricField%FIELD_FINISHED) THEN
+          localError="Field number "//TRIM(NumberToVString(geometricField%USER_NUMBER,"*",err,error))//" has not been finished."
+          CALL FlagError(localError,err,error,*999)
         ENDIF
-        !Finalise
-        CALL Field_InterpolatedPointsMetricsFinalise(interpolatedPointMetrics,err,error,*999)
-        CALL Field_InterpolatedPointsFinalise(interpolatedPoint,err,error,*999)
-        CALL Field_InterpolationParametersFinalise(interpolationParameters,err,error,*999)
-        ! DO elementIdx=1,decompositionElements%NUMBER_OF_ELEMENTS
-        !   CALL Field_InterpolationParametersElementGet(FIELD_VALUES_SET_TYPE,elementIdx, &
-        !     & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-        !   elementVolume=0.0_DP
-        !   DO gaussPointIdx=1,numberOfGaussPoints
-        !     CALL Field_InterpolateXi(FIRST_PART_DERIV,gaussPoints(1:3,gaussPointIdx),interpolatedPoint(FIELD_U_VARIABLE_TYPE)%PTR, &
-        !       & err,error,*999)
-        !     CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_VOLUME_TYPE, &
-        !       & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-        !     elementVolume=elementVolume+InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*gaussWeights(gaussPointIdx)
-        !   ENDDO !gaussPointIdx
-        !   field%GEOMETRIC_FIELD_PARAMETERS%volumes(elementIdx)=elementVolume
-        ! ENDDO !elementIdx
-        !==================== Update T_sweating =====================
-        ! IF(T_skin<=33.0_DP) THEN
-        !   T_swe=42.084_DP-0.15833_DP*T_skin
-        ! ELSE IF(T_skin>33.0_DP) THEN
-        !   T_swe=36.85_DP
-        ! END IF
-        !
-        ! IF(T_core>T_swe) THEN
-        !   mdot_swe=(45.8_DP+739.4_DP*(T_core-T_swe))/(3.6D6)
-        ! END IF
-        ! !TODO find P_out and ....
-        ! w=0.06_DP+mdot_swe*(1.0_DP-0.06_DP)/0.000193_DP !TODO strange relation
-        ! q_swe=w*(P_skin-P_out)/(Rswe_cl+1.0_DP/(f_cl*h_swe)) ! W/m2 TODO I need to change this also be carefull about rhoc
+        IF(geometricField%TYPE/=FIELD_GEOMETRIC_TYPE) THEN
+          localError="Field number "//TRIM(NumberToVString(geometricField%USER_NUMBER,"*",err,error))//" is not a geometric field."
+          CALL FlagError(localError,err,error,*999)
+        ENDIF
+        IF(.NOT.ASSOCIATED(geometricField%GEOMETRIC_FIELD_PARAMETERS)) THEN
+          localError="Geometric parameters are not associated for field number "// &
+            & TRIM(NumberToVString(geometricField%USER_NUMBER,"*",err,error))//"."
+          CALL FlagError(localError,err,error,*999)
+        ENDIF
 
-        !========================= q_breathing for lung =======================
-        ! q_bre=1.0_DP/V_lung*(0.0014_DP*Qm_glob*(34.0_0-T_out)+0.0173_DP*Qm_glob*(5.87_DP-P_out)) ! W/cm3 !TODO change the units divide by rhoc and find T_out and ....
+        NULLIFY(coordinateSystem)
+        NULLIFY(interpolationParameters)
+        NULLIFY(interpolatedPoint)
+        NULLIFY(interpolatedPointMetrics)
+        CALL Field_CoordinateSystemGet(geometricField,coordinateSystem,err,error,*999)
+        IF(coordinateSystem%NUMBER_OF_DIMENSIONS==3) THEN !only calculate Skin temperature if the body is in 3D
+          CALL Field_InterpolationParametersInitialise(geometricField,interpolationParameters,err,error,*999)
+          CALL Field_InterpolatedPointsInitialise(interpolationParameters,interpolatedPoint,err,error,*999)
+          CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoint,interpolatedPointMetrics,err,error,*999)
+          !Get basis type for the first component of the mesh defined with this geometric field
+          NULLIFY(decomposition)
+          CALL Field_DecompositionGet(geometricField,decomposition,err,error,*999)
+          NULLIFY(decompositionTopology)
+          CALL Decomposition_TopologyGet(decomposition,decompositionTopology,err,error,*999)
+          NULLIFY(decompositionElements)
+          CALL DecompositionTopology_ElementsGet(decompositionTopology,decompositionElements,err,error,*999)
+          NULLIFY(decompositionFaces)
+          CALL DecompositionTopology_FacesGet(decompositionTopology,decompositionFaces,err,error,*999)
+          NULLIFY(domain)
+          CALL Decomposition_DomainGet(decomposition,0,domain,err,error,*999)
+          NULLIFY(domainTopology)
+          CALL Domain_TopologyGet(domain,domainTopology,err,error,*999)
+          NULLIFY(domainFaces)
+          CALL DomainTopology_FacesGet(domainTopology,domainFaces,err,error,*999)
+          NULLIFY(domainElements)
+          CALL DomainTopology_ElementsGet(domainTopology,domainElements,err,error,*999)
+
+          NULLIFY(basis)
+          !Allocate Gauss points
+          ! order=2
+          ! maxNumberOfGauss=order*order*order
+          ! ALLOCATE(gaussPoints(3,maxNumberOfGauss),STAT=err)
+          ! IF(err/=0) CALL FlagError("Could not allocated gauss points.",err,error,*999)
+          ! ALLOCATE(gaussWeights(maxNumberOfGauss),STAT=err)
+          ! IF(err/=0) CALL FlagError("Could not allocated gauss weights.",err,error,*999)
+          !Calculate Gauss points
+          ! CALL Basis_GaussPointsCalculate(basis,order,3,numberOfGaussPoints,gaussPoints,gaussWeights,err,error,*999)
+          ! decompositiontopology%elements%number_of_elements
+           !decompositiontopology%elements%elements(1)%element_faces
+
+          !==================== Calculate average skin temperature ===================
+          T_skin=0.0_DP
+          counter = 0 ! to see how many faces are boundary faces
+          !Loop over the boundary faces
+          DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
+            DO faceIdx=1,SIZE(decompositionTopology%ELEMENTS%ELEMENTS(elemIdx)%ELEMENT_FACES)
+              faceNumber=decompositiontopology%elements%elements(elemIdx)%element_faces(faceIdx)
+              face=>domainFaces%faces(faceNumber)
+              IF (face%boundary_face) THEN
+                counter = counter + 1
+                basis=>face%basis
+                IF(.NOT.ASSOCIATED(basis)) THEN
+                  CALL FlagError("basis is not associated.",err,error,*999)
+                END IF
+                quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+                IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+                  CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
+                END IF
+
+                CALL Field_InterpolationParametersFaceGet(FIELD_VALUES_SET_TYPE,faceNumber, &
+                  & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+
+                DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+                  ! CALL Field_InterpolateXi(FIRST_PART_DERIV,gaussPoints(1:3,gaussPointIdx),interpolatedPoint(FIELD_U_VARIABLE_TYPE)%PTR, &
+                  CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                    & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                  !   & err,error,*999)
+                  CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_AREA_TYPE, &
+                    & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+
+                  DO nodeIdx=1,basis%NUMBER_OF_NODES
+                    nodeNumber=face%NODES_IN_FACE(nodeIdx)
+                    DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+
+                      globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
+                      CALL Field_ParameterSetGetNode(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,1, &
+                        & globalDof,1,Tn,err,error,*999)
+                      ! Tn=dependent_field%variables(1)%parameter_sets%set_type(1)%ptr%parameters%cmiss%datadp(1)
+
+                      ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                      phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                      T_skin=T_skin+Tn*Phim* &
+                        & InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
+                    END DO !derivIdx
+                  END DO !nodeIdx
+                  ! area=area+InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
+                ENDDO !gaussIdx
+              END IF
+            ENDDO !faceIdx
+          END DO !elemIdx
+
+          area=geometricField%GEOMETRIC_FIELD_PARAMETERS%surfaceArea
+          ! print*, 'area = ',area
+          T_skin = T_skin/area
+          ! print*, 'Tsk = ', T_skin, counter
+
+
+          IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
+            CALL MPI_ALLREDUCE(MPI_IN_PLACE,T_skin, &
+            & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
+            CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
+          END IF
+          ! CALL Field_ParameterSetUpdateElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,T_skin,ERR,ERROR,*999)
+          CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,T_skin,err,error,*999)
+          ! print*, 'afterMPI',T_skin
+         ! ================================================================================
+
+          ! print*, field%GEOMETRIC_FIELD_PARAMETERS%surfaceArea
+
+          ! ===============================================================================
+          ! Calculate total muscle volume (for each partition first)
+          muscleVolume = 0.0_DP
+          DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
+            !CALL Field_ParameterSetGetElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,elemIdx,3, &
+              ! & organType,err,error,*999)
+            CALL Field_ParameterSetGetLocalElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
+             & elemIdx,3,organType,err,error,*999)
+            IF(organType==1) THEN ! TODO change 1 to muscle type
+              muscleVolume=muscleVolume+geometricField%GEOMETRIC_FIELD_PARAMETERS%VOLUMES(elemIdx)
+            ENDIF
+          ENDDO
+
+          ! Collect and sum the total muscle volumes of each partition to obtain total muscle volume. vol=SUM(vol_partition)
+          IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
+            CALL MPI_ALLREDUCE(MPI_IN_PLACE,muscleVolume, &
+            & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
+            CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
+          END IF
+
+          ! Update the muscle total volume in independent field.
+          CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
+            & 4,muscleVolume,err,error,*999)
+          ! ===============================================================================
+          CALL Field_ParameterSetUpdateStart(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
+          CALL Field_ParameterSetUpdateFinish(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
+
+
+          ! ===================== obtain T_core =======================
+          ! TODO Should it be rectal temperature only??
+          T_core=0.0_DP
+          DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
+            basis=>domainElements%elements(elemIdx)%basis
+            IF(.NOT.ASSOCIATED(basis)) THEN
+              CALL FlagError("basis is not associated.",err,error,*999)
+            END IF
+            quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+            IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+              CALL FlagError("Element basis default quadrature scheme is not associated.",err,error,*999)
+            END IF
+
+            CALL Field_InterpolationParametersElementGet(FIELD_VALUES_SET_TYPE,elemIdx, &
+              & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+
+            DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+              CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+
+              CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_VOLUME_TYPE, &
+                & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+
+              DO nodeIdx=1,basis%NUMBER_OF_NODES
+                nodeNumber=domainElements%elements(elemIdx)%element_nodes(nodeIdx)
+                DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+
+                  globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
+                  CALL Field_ParameterSetGetNode(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,1, &
+                    & globalDof,1,Tn,err,error,*999)
+
+                  ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                  phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                  T_core=T_core+Tn*phim* &
+                    & InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
+                END DO !derivIdx
+              END DO !nodeIdx
+            ENDDO !gaussIdx
+          ENDDO !elementIdx
+
+          T_core=T_core/muscleVolume
+
+          IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
+            CALL MPI_ALLREDUCE(MPI_IN_PLACE,T_core, &
+            & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
+            CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
+          END IF
+
+          CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,2,T_core,err,error,*999)
+
+          ! TODO: You need to print some values on terminal to check them. Also, you need to exprot them into a file.
+          myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
+          ! CALL Field_ParameterSetGetElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,3, &
+          !   & c_param,err,error,*999)
+
+          IF(myComputationalNodeNumber==0)THEN
+            CALL Field_ParameterSetGetLocalElement(sourceField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
+             & 1,1,sourceValue,err,error,*999)
+            print*, "Tskin,Tcore=",T_skin,T_core
+            open(1,file='data',status='old')
+            write(1,*) T_skin,T_core,sourceValue
+          ENDIF
+          !Finalise
+          CALL Field_InterpolatedPointsMetricsFinalise(interpolatedPointMetrics,err,error,*999)
+          CALL Field_InterpolatedPointsFinalise(interpolatedPoint,err,error,*999)
+          CALL Field_InterpolationParametersFinalise(interpolationParameters,err,error,*999)
+          ! DO elementIdx=1,decompositionElements%NUMBER_OF_ELEMENTS
+          !   CALL Field_InterpolationParametersElementGet(FIELD_VALUES_SET_TYPE,elementIdx, &
+          !     & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+          !   elementVolume=0.0_DP
+          !   DO gaussPointIdx=1,numberOfGaussPoints
+          !     CALL Field_InterpolateXi(FIRST_PART_DERIV,gaussPoints(1:3,gaussPointIdx),interpolatedPoint(FIELD_U_VARIABLE_TYPE)%PTR, &
+          !       & err,error,*999)
+          !     CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_VOLUME_TYPE, &
+          !       & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+          !     elementVolume=elementVolume+InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*gaussWeights(gaussPointIdx)
+          !   ENDDO !gaussPointIdx
+          !   field%GEOMETRIC_FIELD_PARAMETERS%volumes(elementIdx)=elementVolume
+          ! ENDDO !elementIdx
+          !==================== Update T_sweating =====================
+          ! IF(T_skin<=33.0_DP) THEN
+          !   T_swe=42.084_DP-0.15833_DP*T_skin
+          ! ELSE IF(T_skin>33.0_DP) THEN
+          !   T_swe=36.85_DP
+          ! END IF
+          !
+          ! IF(T_core>T_swe) THEN
+          !   mdot_swe=(45.8_DP+739.4_DP*(T_core-T_swe))/(3.6D6)
+          ! END IF
+          ! !TODO find P_out and ....
+          ! w=0.06_DP+mdot_swe*(1.0_DP-0.06_DP)/0.000193_DP !TODO strange relation
+          ! q_swe=w*(P_skin-P_out)/(Rswe_cl+1.0_DP/(f_cl*h_swe)) ! W/m2 TODO I need to change this also be carefull about rhoc
+
+          !========================= q_breathing for lung =======================
+          ! q_bre=1.0_DP/V_lung*(0.0014_DP*Qm_glob*(34.0_0-T_out)+0.0173_DP*Qm_glob*(5.87_DP-P_out)) ! W/cm3 !TODO change the units divide by rhoc and find T_out and ....
 
 
 
-      ENDIF
+        ENDIF
 
-    END IF
+      END IF
+    CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
 
+    CASE DEFAULT
+      LOCAL_ERROR="The problem subtype of "//TRIM(NUMBER_TO_VSTRING(PROBLEM%SPECIFICATION(3),"*",ERR,ERROR))// &
+        & " does not equal a coupled Navier-Stokes source diffusion & advection-diffusion equation subtype."
+      CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+
+    END SELECT
 
 
     EXITS("NavierStokesDiffAdvDiff_UpdateParameters")

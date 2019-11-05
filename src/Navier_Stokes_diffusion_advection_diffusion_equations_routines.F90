@@ -51,6 +51,7 @@ MODULE NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_ROUTINES
   USE BaseRoutines
   USE BasisRoutines
   USE BOUNDARY_CONDITIONS_ROUTINES
+  USE CHARACTERISTIC_EQUATION_ROUTINES
   USE CONSTANTS
   USE CONTROL_LOOP_ROUTINES
   USE COORDINATE_ROUTINES
@@ -1208,7 +1209,7 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Update the parameters
+  !>Update the parameters muscle volume, Tskin, Tcore.
   SUBROUTINE NavierStokesDiffAdvDiff_UpdateControlParameters(controlLoop,solver,err,error,*)
 
     !Argument variables
@@ -1244,20 +1245,29 @@ CONTAINS
     TYPE(FIELD_TYPE), POINTER :: geometricField,dependentField,independentField,sourceField
     LOGICAL :: dependentGeometry
     TYPE(VARYING_STRING) :: dummyError,localError
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: CONTROL_LOOP_ROOT,CONTROL_LOOP,simpleLoop2
+    TYPE(SOLVERS_TYPE), POINTER :: solvers
+
     !
     ENTERS("NavierStokesDiffAdvDiff_UpdateControlParameters",ERR,ERROR,*999)
 
 
-
-
-
-
-
-
     !Get the equations sets, dependent and geometric fields.
+
+    !Get the bioheat solver
+    NULLIFY(CONTROL_LOOP_ROOT)
+    CONTROL_LOOP_ROOT=>controlLoop%PROBLEM%CONTROL_LOOP
+    NULLIFY(CONTROL_LOOP)
+    CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,err,error,*999)
+    NULLIFY(simpleLoop2)
+    CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
+    NULLIFY(solvers)
+    CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop2,solvers,err,error,*999)
+    NULLIFY(solver)
     NULLIFY(solverDiffusion)
+    CALL SOLVERS_SOLVER_GET(solvers,2,solverDiffusion,err,error,*999)
+
     NULLIFY(solverEquationsDiffusion)
-    CALL SOLVERS_SOLVER_GET(SOLVER%SOLVERS,3,solverDiffusion,err,error,*999) !TODO get the bioheat solver not this.
     CALL Solver_SolverEquationsGet(solverDiffusion,solverEquationsDiffusion,err,error,*999)
 
     NULLIFY(solverMappingDiffusion)
@@ -1265,15 +1275,16 @@ CONTAINS
     NULLIFY(equationsSetDiffusion)
 
     CALL SolverMapping_EquationsSetGet(solverMappingDiffusion,1,equationsSetDiffusion,err,error,*999)
+    !Get dependent, independent, source and geometric fields
     NULLIFY(dependentField)
     NULLIFY(independentField)
     NULLIFY(sourceField)
-    !Get blood temperature
+
     CALL EquationsSet_DependentFieldGet(equationsSetDiffusion,dependentField,err,error,*999)
     CALL EquationsSet_SourceFieldGet(equationsSetDiffusion,sourceField,err,error,*999)
     !Get the independent field where T_skin and other parameters are stored
     CALL EquationsSet_IndependentFieldGet(equationsSetDiffusion,independentField,err,error,*999)
-    ! geometricField=>dependentField%geometric_field
+    ! get the geometry
     CALL Field_GeometricGeneralFieldGet(dependentField,geometricField,dependentGeometry,err,error,*999)
 
 
@@ -1292,6 +1303,7 @@ CONTAINS
       CALL FlagError(localError,err,error,*999)
     ENDIF
 
+    ! Calculate skin temperature by averaging Tt over boundary which is skin.
     NULLIFY(coordinateSystem)
     NULLIFY(interpolationParameters)
     NULLIFY(interpolatedPoint)
@@ -1320,17 +1332,6 @@ CONTAINS
       CALL DomainTopology_ElementsGet(domainTopology,domainElements,err,error,*999)
 
       NULLIFY(basis)
-      !Allocate Gauss points
-      ! order=2
-      ! maxNumberOfGauss=order*order*order
-      ! ALLOCATE(gaussPoints(3,maxNumberOfGauss),STAT=err)
-      ! IF(err/=0) CALL FlagError("Could not allocated gauss points.",err,error,*999)
-      ! ALLOCATE(gaussWeights(maxNumberOfGauss),STAT=err)
-      ! IF(err/=0) CALL FlagError("Could not allocated gauss weights.",err,error,*999)
-      !Calculate Gauss points
-      ! CALL Basis_GaussPointsCalculate(basis,order,3,numberOfGaussPoints,gaussPoints,gaussWeights,err,error,*999)
-      ! decompositiontopology%elements%number_of_elements
-       !decompositiontopology%elements%elements(1)%element_faces
 
       !==================== Calculate average skin temperature ===================
       T_skin=0.0_DP
@@ -1909,7 +1910,7 @@ CONTAINS
               & err,error,*999)
           END IF
           SELECT CASE(CONTROL_LOOP%PROBLEM%SPECIFICATION(3))
-          CASE(PROBLEM_COUPLED_SOURCE_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
+          CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
             IF(SOLVER%GLOBAL_NUMBER==1) THEN
               !Output results
             !  CALL ADVECTION_DIFFUSION_EQUATION_POST_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
@@ -1917,6 +1918,28 @@ CONTAINS
               !Output results
             !  CALL DIFFUSION_EQUATION_POST_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
             END IF
+
+
+
+
+            CALL NavierStokesDiffAdvDiff_PostSolveOutputData(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            
           CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
             MODEL=NO_COUPLED
             SELECT CASE(MODEL)

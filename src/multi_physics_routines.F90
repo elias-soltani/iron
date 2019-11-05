@@ -723,7 +723,7 @@ CONTAINS
       CASE(PROBLEM_MULTI_COMPARTMENT_TRANSPORT_TYPE)
         !do nothing
       CASE(PROBLEM_NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_TYPE)
-        !do nothing
+        CALL NavierStokesDiffAdvDiff_ControlLoopPostLoop(CONTROL_LOOP,err,error,*999)
       CASE DEFAULT
         LOCAL_ERROR="Problem type "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(2),"*",ERR,ERROR))// &
           & " is not valid for a multi physics problem class."

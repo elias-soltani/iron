@@ -963,7 +963,7 @@ CONTAINS
               ! Do extrapolation for the first iteration. Copy parameter sets.
               CALL NavierStokesDiffAdvDiff_CharacteristicPreSolve(controlLoop,solver,err,error,*999)
             CASE(SOLVER_DYNAMIC_TYPE)
-              SELECT CASE(solver%solvers%control_loop%loop_type)
+              SELECT CASE(controlLoop%loop_type)
               CASE(PROBLEM_CONTROL_WHILE_LOOP_TYPE)
 ! --- 1 D   N a v i e r - S t o k e s   S o l v e r ---
                 !Copy parameter sets.
@@ -1872,17 +1872,368 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Sets up the diffusion-diffusion problem post solve.
-  SUBROUTINE NavierStokesDiffAdvDiff_PostSolve(CONTROL_LOOP,SOLVER,ERR,ERROR,*)
+  !>Update boundary conditions for Navier-Stokes flow pre solve
+  SUBROUTINE NavierStokesDiffAdvDiff_PreSolveBoundaryConditions(SOLVER,err,error,*)
 
     !Argument variables
-    TYPE(CONTROL_LOOP_TYPE), POINTER :: CONTROL_LOOP !<A pointer to the control loop to solve.
+    TYPE(SOLVER_TYPE), POINTER :: SOLVER
+    INTEGER(INTG), INTENT(OUT) :: ERR
+    TYPE(VARYING_STRING), INTENT(OUT) :: ERROR
+    !Local Variables
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: CONTROL_LOOP
+    TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: BOUNDARY_CONDITIONS_VARIABLE
+    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: BOUNDARY_CONDITIONS
+    TYPE(DOMAIN_TYPE), POINTER :: DOMAIN
+    TYPE(DOMAIN_NODES_TYPE), POINTER :: DOMAIN_NODES
+    TYPE(EQUATIONS_SET_TYPE), POINTER :: EQUATIONS_SET,SOLID_EQUATIONS_SET,FLUID_EQUATIONS_SET
+    TYPE(EQUATIONS_SET_DEPENDENT_TYPE), POINTER :: SOLID_DEPENDENT
+    TYPE(EQUATIONS_SET_GEOMETRY_TYPE), POINTER :: FLUID_GEOMETRIC
+    TYPE(EquationsType), POINTER :: EQUATIONS,SOLID_EQUATIONS,FLUID_EQUATIONS
+    TYPE(FIELD_INTERPOLATED_POINT_PTR_TYPE), POINTER :: INTERPOLATED_POINT(:)
+    TYPE(FIELD_INTERPOLATION_PARAMETERS_PTR_TYPE), POINTER :: INTERPOLATION_PARAMETERS(:)
+    TYPE(FIELD_TYPE), POINTER :: ANALYTIC_FIELD,dependentField,geometricField,materialsField
+    TYPE(FIELD_TYPE), POINTER :: independentField,SOLID_dependentField,FLUID_GEOMETRIC_FIELD
+    TYPE(FIELD_VARIABLE_TYPE), POINTER :: ANALYTIC_VARIABLE,FIELD_VARIABLE,GEOMETRIC_VARIABLE,MATERIALS_VARIABLE
+    TYPE(FIELD_VARIABLE_TYPE), POINTER :: dependentFieldVariable,independentFieldVariable
+    TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: SOLVER_EQUATIONS,SOLID_SOLVER_EQUATIONS,FLUID_SOLVER_EQUATIONS
+    TYPE(SOLVER_MAPPING_TYPE), POINTER :: SOLVER_MAPPING,SOLID_SOLVER_MAPPING,FLUID_SOLVER_MAPPING
+    TYPE(SOLVER_TYPE), POINTER :: Solver2
+    TYPE(SOLVERS_TYPE), POINTER :: SOLVERS
+    TYPE(VARYING_STRING) :: localError
+    INTEGER(INTG) :: nodeIdx,derivativeIdx,versionIdx,variableIdx,numberOfSourceTimesteps,timeIdx,componentIdx
+    INTEGER(INTG) :: NUMBER_OF_DIMENSIONS,BOUNDARY_CONDITION_CHECK_VARIABLE,GLOBAL_DERIV_INDEX,node_idx,variable_type
+    INTEGER(INTG) :: variable_idx,local_ny,ANALYTIC_FUNCTION_TYPE,component_idx,deriv_idx,dim_idx,version_idx
+    INTEGER(INTG) :: element_idx,en_idx,I,J,K,number_of_nodes_xic(3),search_idx,localDof,globalDof,componentBC,previousNodeNumber
+    INTEGER(INTG) :: componentNumberVelocity,numberOfDimensions,numberOfNodes,numberOfGlobalNodes
+    INTEGER(INTG) :: dependentVariableType,independentVariableType,dependentDof,independentDof,userNodeNumber,localNodeNumber
+    INTEGER(INTG) :: EquationsSetIndex,SolidNodeNumber,FluidNodeNumber,equationsSetIdx
+    INTEGER(INTG) :: currentTimeLoopIteration,outputIterationNumber,numberOfFittedNodes,computationalNode
+    INTEGER(INTG), ALLOCATABLE :: InletNodes(:)
+    REAL(DP) :: CURRENT_TIME,TIME_INCREMENT,DISPLACEMENT_VALUE,VALUE,XI_COORDINATES(3),timeData,QP,QPP,componentValues(3)
+    REAL(DP) :: T_COORDINATES(20,3),MU_PARAM,RHO_PARAM,X(3),FluidGFValue,SolidDFValue,NewLaplaceBoundaryValue,Lref,Tref,Mref
+    REAL(DP) :: startTime,stopTime,currentTime,timeIncrement
+    REAL(DP), POINTER :: MESH_VELOCITY_VALUES(:), GEOMETRIC_PARAMETERS(:), BOUNDARY_VALUES(:)
+    REAL(DP), POINTER :: TANGENTS(:,:),NORMAL(:),TIME,ANALYTIC_PARAMETERS(:),MATERIALS_PARAMETERS(:)
+    REAL(DP), POINTER :: independentParameters(:),dependentParameters(:)
+    REAL(DP), ALLOCATABLE :: nodeData(:,:),qSpline(:),qValues(:),tValues(:),BoundaryValues(:),fittedNodes(:)
+    LOGICAL :: ghostNode,nodeExists,importDataFromFile,ALENavierStokesEquationsSetFound=.FALSE.
+    LOGICAL :: SolidEquationsSetFound=.FALSE.,SolidNodeFound=.FALSE.,FluidEquationsSetFound=.FALSE.,parameterSetCreated
+    CHARACTER(70) :: inputFile,tempString
+
+    NULLIFY(SOLVER_EQUATIONS)
+    NULLIFY(SOLVER_MAPPING)
+    NULLIFY(EQUATIONS_SET)
+    NULLIFY(EQUATIONS)
+    NULLIFY(BOUNDARY_CONDITIONS_VARIABLE)
+    NULLIFY(BOUNDARY_CONDITIONS)
+    NULLIFY(ANALYTIC_FIELD)
+    NULLIFY(dependentField)
+    NULLIFY(geometricField)
+    NULLIFY(materialsField)
+    NULLIFY(independentField)
+    NULLIFY(ANALYTIC_VARIABLE)
+    NULLIFY(FIELD_VARIABLE)
+    NULLIFY(GEOMETRIC_VARIABLE)
+    NULLIFY(MATERIALS_VARIABLE)
+    NULLIFY(DOMAIN)
+    NULLIFY(DOMAIN_NODES)
+    NULLIFY(INTERPOLATED_POINT)
+    NULLIFY(INTERPOLATION_PARAMETERS)
+    NULLIFY(MESH_VELOCITY_VALUES)
+    NULLIFY(GEOMETRIC_PARAMETERS)
+    NULLIFY(BOUNDARY_VALUES)
+    NULLIFY(TANGENTS)
+    NULLIFY(NORMAL)
+    NULLIFY(TIME)
+    NULLIFY(ANALYTIC_PARAMETERS)
+    NULLIFY(MATERIALS_PARAMETERS)
+    NULLIFY(independentParameters)
+    NULLIFY(dependentParameters)
+
+    ENTERS("NavierStokesDiffAdvDiff_PreSolveBoundaryConditions",err,error,*999)
+
+    IF(ASSOCIATED(SOLVER)) THEN
+      SOLVERS=>SOLVER%SOLVERS
+      IF(ASSOCIATED(SOLVERS)) THEN
+        CONTROL_LOOP=>SOLVERS%CONTROL_LOOP
+        CALL CONTROL_LOOP_TIMES_GET(CONTROL_LOOP,startTime,stopTime,CURRENT_TIME,timeIncrement, &
+          & currentTimeLoopIteration,outputIterationNumber,ERR,ERROR,*999)
+        IF(ASSOCIATED(CONTROL_LOOP%PROBLEM)) THEN
+          IF(.NOT.ALLOCATED(CONTROL_LOOP%problem%specification)) THEN
+            CALL FlagError("Problem specification array is not allocated.",err,error,*999)
+          ELSE IF(SIZE(CONTROL_LOOP%problem%specification,1)<3) THEN
+            CALL FlagError("Problem specification must have three entries for a Navier-Stokes problem.",err,error,*999)
+          END IF
+
+          SELECT CASE(CONTROL_LOOP%PROBLEM%SPECIFICATION(3))
+
+
+          CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+            SOLVER_EQUATIONS=>SOLVER%SOLVER_EQUATIONS
+            IF(ASSOCIATED(SOLVER_EQUATIONS)) THEN
+              !If analytic flow waveform, calculate and update
+              SOLVER_MAPPING=>SOLVER_equations%SOLVER_MAPPING
+              IF(ASSOCIATED(SOLVER_MAPPING)) THEN
+                EQUATIONS=>SOLVER_MAPPING%EQUATIONS_SET_TO_SOLVER_MAP(1)%EQUATIONS
+                IF(ASSOCIATED(EQUATIONS)) THEN
+                  BOUNDARY_CONDITIONS=>SOLVER_equations%BOUNDARY_CONDITIONS
+                  IF(ASSOCIATED(BOUNDARY_CONDITIONS)) THEN
+                    EQUATIONS_SET=>equations%equationsSet
+                    IF(ASSOCIATED(EQUATIONS_SET%ANALYTIC)) THEN
+                      SELECT CASE(EQUATIONS_SET%ANALYTIC%ANALYTIC_FUNCTION_TYPE)
+                      CASE(EQUATIONS_SET_NAVIER_STOKES_EQUATION_FLOWRATE_AORTA, &
+                        & EQUATIONS_SET_NAVIER_STOKES_EQUATION_FLOWRATE_OLUFSEN)
+                        EQUATIONS_SET%ANALYTIC%ANALYTIC_TIME=CURRENT_TIME
+                        ! Calculate analytic values
+                        CALL NavierStokes_BoundaryConditionsAnalyticCalculate(EQUATIONS_SET,BOUNDARY_CONDITIONS,err,error,*999)
+                      CASE(EQUATIONS_SET_NAVIER_STOKES_EQUATION_SPLINT_FROM_FILE)
+                        ! Perform spline interpolation of values from a file
+                        EQUATIONS_SET%ANALYTIC%ANALYTIC_TIME=CURRENT_TIME
+                        dependentField=>EQUATIONS_SET%DEPENDENT%DEPENDENT_FIELD
+                        ANALYTIC_FIELD=>EQUATIONS_SET%ANALYTIC%ANALYTIC_FIELD
+                        DO variableIdx=1,dependentField%NUMBER_OF_VARIABLES
+                          dependentVariableType=dependentField%VARIABLES(variableIdx)%VARIABLE_TYPE
+                          NULLIFY(dependentFieldVariable)
+                          CALL Field_VariableGet(dependentField,dependentVariableType,dependentFieldVariable,err,error,*999)
+                          CALL BOUNDARY_CONDITIONS_VARIABLE_GET(BOUNDARY_CONDITIONS, &
+                            & dependentFieldVariable,BOUNDARY_CONDITIONS_VARIABLE,err,error,*999)
+                          IF(ASSOCIATED(BOUNDARY_CONDITIONS_VARIABLE)) THEN
+                            IF(ASSOCIATED(dependentFieldVariable)) THEN
+                              DO componentIdx=1,dependentFieldVariable%NUMBER_OF_COMPONENTS
+                                IF(dependentFieldVariable%COMPONENTS(componentIdx)%INTERPOLATION_TYPE== &
+                                  & FIELD_NODE_BASED_INTERPOLATION) THEN
+                                  domain=>dependentFieldVariable%COMPONENTS(componentIdx)%DOMAIN
+                                  IF(ASSOCIATED(domain)) THEN
+                                    IF(ASSOCIATED(domain%TOPOLOGY)) THEN
+                                      DOMAIN_NODES=>domain%TOPOLOGY%NODES
+                                      IF(ASSOCIATED(DOMAIN_NODES)) THEN
+                                        ! Create the analytic field values type on the dependent field if it does not exist
+                                        CALL FIELD_PARAMETER_SET_CREATED(dependentField,dependentVariableType, &
+                                          & FIELD_ANALYTIC_VALUES_SET_TYPE,parameterSetCreated,ERR,ERROR,*999)
+                                        IF (.NOT. parameterSetCreated) THEN
+                                          CALL FIELD_PARAMETER_SET_CREATE(dependentField,dependentVariableType, &
+                                            & FIELD_ANALYTIC_VALUES_SET_TYPE,ERR,ERROR,*999)
+                                        END IF
+                                        !Loop over the local nodes excluding the ghosts.
+                                        DO nodeIdx=1,DOMAIN_NODES%NUMBER_OF_NODES
+                                          userNodeNumber=DOMAIN_NODES%NODES(nodeIdx)%USER_NUMBER
+                                          DO derivativeIdx=1,DOMAIN_NODES%NODES(nodeIdx)%NUMBER_OF_DERIVATIVES
+                                            DO versionIdx=1,DOMAIN_NODES%NODES(nodeIdx)%DERIVATIVES(derivativeIdx)% &
+                                                & numberOfVersions
+                                              dependentDof = dependentFieldVariable%COMPONENTS(componentIdx)%PARAM_TO_DOF_MAP% &
+                                                & NODE_PARAM2DOF_MAP%NODES(nodeIdx)%DERIVATIVES(derivativeIdx)% &
+                                                & VERSIONS(versionIdx)
+                                              ! Update dependent field value if this is a splint BC
+                                              BOUNDARY_CONDITION_CHECK_VARIABLE=BOUNDARY_CONDITIONS_VARIABLE% &
+                                                & CONDITION_TYPES(dependentDof)
+                                              IF(BOUNDARY_CONDITION_CHECK_VARIABLE==BOUNDARY_CONDITION_FIXED_FITTED) THEN
+                                                !Update analytic field if file exists and dependent field if boundary condition set
+                                                inputFile = './input/interpolatedData/1D/'
+                                                IF(dependentVariableType == FIELD_U_VARIABLE_TYPE) THEN
+                                                  inputFile = TRIM(inputFile) // 'U/component'
+                                                END IF
+                                                WRITE(tempString,"(I1.1)") componentIdx
+                                                inputFile = TRIM(inputFile) // tempString(1:1) // '/derivative'
+                                                WRITE(tempString,"(I1.1)") derivativeIdx
+                                                inputFile = TRIM(inputFile) // tempString(1:1) // '/version'
+                                                WRITE(tempString,"(I1.1)") versionIdx
+                                                inputFile = TRIM(inputFile) // tempString(1:1) // '/'
+                                                WRITE(tempString,"(I4.4)") userNodeNumber
+                                                inputFile = TRIM(inputFile) // tempString(1:4) // '.dat'
+                                                inputFile = TRIM(inputFile)
+                                                INQUIRE(FILE=inputFile, EXIST=importDataFromFile)
+                                                IF(importDataFromFile) THEN
+                                                  !Read fitted data from input file (if exists)
+                                                  OPEN(UNIT=10, FILE=inputFile, STATUS='OLD')
+                                                  ! Header timeData = numberOfTimesteps
+                                                  READ(10,*) timeData
+                                                  numberOfSourceTimesteps = INT(timeData)
+                                                  ALLOCATE(nodeData(numberOfSourceTimesteps,2))
+                                                  ALLOCATE(qValues(numberOfSourceTimesteps))
+                                                  ALLOCATE(tValues(numberOfSourceTimesteps))
+                                                  ALLOCATE(qSpline(numberOfSourceTimesteps))
+                                                  nodeData = 0.0_DP
+                                                  ! Read in time and dependent value
+                                                  DO timeIdx=1,numberOfSourceTimesteps
+                                                    READ(10,*) (nodeData(timeIdx,component_idx), component_idx=1,2)
+                                                  END DO
+                                                  CLOSE(UNIT=10)
+                                                  tValues = nodeData(:,1)
+                                                  qValues = nodeData(:,2)
+                                                  CALL spline_cubic_set(numberOfSourceTimesteps,tValues,qValues, &
+                                                    & 2,0.0_DP,2,0.0_DP,qSpline,err,error,*999)
+                                                  CALL spline_cubic_val(numberOfSourceTimesteps,tValues,qValues,qSpline, &
+                                                    & CURRENT_TIME,VALUE,QP,QPP,err,error,*999)
+                                                  DEALLOCATE(nodeData)
+                                                  DEALLOCATE(qSpline)
+                                                  DEALLOCATE(qValues)
+                                                  DEALLOCATE(tValues)
+                                                  CALL FIELD_PARAMETER_SET_UPDATE_LOCAL_DOF(dependentField, &
+                                                    & dependentVariableType,FIELD_VALUES_SET_TYPE,dependentDof, &
+                                                    & VALUE,ERR,ERROR,*999)
+                                                  CALL FIELD_PARAMETER_SET_UPDATE_LOCAL_DOF(dependentField, &
+                                                    & dependentVariableType,FIELD_ANALYTIC_VALUES_SET_TYPE,dependentDof, &
+                                                    & VALUE,ERR,ERROR,*999)
+                                                END IF
+                                              END IF ! check if import data file exists
+                                            END DO !versionIdx
+                                          END DO !derivativeIdx
+                                        END DO !nodeIdx
+                                        ! Update distributed field values
+                                        CALL Field_ParameterSetUpdateStart(dependentField,dependentVariableType, &
+                                          & FIELD_VALUES_SET_TYPE,err,error,*999)
+                                        CALL Field_ParameterSetUpdateFinish(dependentField,dependentVariableType, &
+                                          & FIELD_VALUES_SET_TYPE,err,error,*999)
+                                        CALL Field_ParameterSetUpdateStart(dependentField,dependentVariableType, &
+                                          & FIELD_ANALYTIC_VALUES_SET_TYPE,err,error,*999)
+                                        CALL Field_ParameterSetUpdateFinish(dependentField,dependentVariableType, &
+                                          & FIELD_ANALYTIC_VALUES_SET_TYPE,err,error,*999)
+                                      ELSE
+                                        CALL FlagError("Domain topology nodes is not associated.",err,error,*999)
+                                      END IF
+                                    ELSE
+                                      CALL FlagError("Domain topology is not associated.",err,error,*999)
+                                    END IF
+                                  ELSE
+                                    CALL FlagError("Domain is not associated.",err,error,*999)
+                                  END IF
+                                ELSE
+                                  CALL FlagError("Only node based interpolation is implemented.",err,error,*999)
+                                END IF
+                              END DO !componentIdx
+                            ELSE
+                              CALL FlagError("Dependent field variable is not associated.",err,error,*999)
+                            END IF
+                          END IF
+                        END DO !variableIdx
+                      CASE(EQUATIONS_SET_NAVIER_STOKES_EQUATION_FLOWRATE_HEART)
+                        ! Using heart lumped parameter model for input
+                        EQUATIONS_SET%ANALYTIC%ANALYTIC_TIME=CURRENT_TIME
+                        dependentField=>EQUATIONS_SET%DEPENDENT%DEPENDENT_FIELD
+                        materialsField=>EQUATIONS_SET%MATERIALS%MATERIALS_FIELD
+                        CALL Field_ParameterSetGetConstant(materialsField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,5, &
+                          & Lref,err,error,*999)
+                        CALL Field_ParameterSetGetConstant(materialsField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,6, &
+                          & Tref,err,error,*999)
+                        CALL Field_ParameterSetGetConstant(materialsField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,7, &
+                          & Mref,err,error,*999)
+                        DO variableIdx=1,dependentField%NUMBER_OF_VARIABLES
+                          dependentVariableType=dependentField%VARIABLES(variableIdx)%VARIABLE_TYPE
+                          NULLIFY(dependentFieldVariable)
+                          CALL Field_VariableGet(dependentField,dependentVariableType,dependentFieldVariable,err,error,*999)
+                          CALL BOUNDARY_CONDITIONS_VARIABLE_GET(BOUNDARY_CONDITIONS,dependentFieldVariable, &
+                            & BOUNDARY_CONDITIONS_VARIABLE,err,error,*999)
+                          IF(ASSOCIATED(BOUNDARY_CONDITIONS_VARIABLE)) THEN
+                            IF(ASSOCIATED(dependentFieldVariable)) THEN
+                              DO componentIdx=1,dependentFieldVariable%NUMBER_OF_COMPONENTS
+                                IF(dependentFieldVariable%COMPONENTS(componentIdx)%INTERPOLATION_TYPE== &
+                                  & FIELD_NODE_BASED_INTERPOLATION) THEN
+                                  domain=>dependentFieldVariable%COMPONENTS(componentIdx)%DOMAIN
+                                  IF(ASSOCIATED(domain)) THEN
+                                    IF(ASSOCIATED(domain%TOPOLOGY)) THEN
+                                      DOMAIN_NODES=>domain%TOPOLOGY%NODES
+                                      IF(ASSOCIATED(DOMAIN_NODES)) THEN
+                                        !Loop over the local nodes excluding the ghosts.
+                                        DO nodeIdx=1,DOMAIN_NODES%NUMBER_OF_NODES
+                                          userNodeNumber=DOMAIN_NODES%NODES(nodeIdx)%USER_NUMBER
+                                          DO derivativeIdx=1,DOMAIN_NODES%NODES(nodeIdx)%NUMBER_OF_DERIVATIVES
+                                            DO versionIdx=1,DOMAIN_NODES%NODES(nodeIdx)%DERIVATIVES(derivativeIdx)% &
+                                               & numberOfVersions
+                                              dependentDof = dependentFieldVariable%COMPONENTS(componentIdx)%PARAM_TO_DOF_MAP% &
+                                                & NODE_PARAM2DOF_MAP%NODES(nodeIdx)%DERIVATIVES(derivativeIdx)% &
+                                                & VERSIONS(versionIdx)
+                                              BOUNDARY_CONDITION_CHECK_VARIABLE=BOUNDARY_CONDITIONS_VARIABLE% &
+                                                & CONDITION_TYPES(dependentDof)
+                                              IF(BOUNDARY_CONDITION_CHECK_VARIABLE==BOUNDARY_CONDITION_FIXED_INLET) THEN
+                                                CALL Field_ParameterSetGetLocalNode(dependentField,FIELD_U1_VARIABLE_TYPE, &
+                                                  & FIELD_VALUES_SET_TYPE,versionIdx,derivativeIdx,userNodeNumber,1,VALUE, &
+                                                  & err,error,*999)
+                                                ! Convert Q from ml/s to non-dimensionalised form.
+                                                CALL FIELD_PARAMETER_SET_UPDATE_LOCAL_DOF(dependentField,dependentVariableType, &
+                                                  & FIELD_VALUES_SET_TYPE,dependentDof,((Lref**3.0)/Tref)*VALUE,err,error,*999)
+                                              END IF
+                                            END DO !versionIdx
+                                          END DO !derivativeIdx
+                                        END DO !nodeIdx
+                                        ! Update distributed field values
+                                        CALL Field_ParameterSetUpdateStart(dependentField,dependentVariableType, &
+                                          & FIELD_VALUES_SET_TYPE,err,error,*999)
+                                        CALL Field_ParameterSetUpdateFinish(dependentField,dependentVariableType, &
+                                          & FIELD_VALUES_SET_TYPE,err,error,*999)
+                                      ELSE
+                                        CALL FlagError("Domain topology nodes is not associated.",err,error,*999)
+                                      END IF
+                                    ELSE
+                                      CALL FlagError("Domain topology is not associated.",err,error,*999)
+                                    END IF
+                                  ELSE
+                                    CALL FlagError("Domain is not associated.",err,error,*999)
+                                  END IF
+                                ELSE
+                                  CALL FlagError("Only node based interpolation is implemented.",err,error,*999)
+                                END IF
+                              END DO !componentIdx
+                            ELSE
+                              CALL FlagError("Dependent field variable is not associated.",err,error,*999)
+                            END IF
+                          END IF
+                        END DO !variableIdx
+                      CASE DEFAULT
+                        ! Do nothing (might have another use for analytic equations)
+                      END SELECT
+                    END IF ! Check for analytic equations
+                    ELSE
+                      CALL FlagError("Boundary conditions are not associated.",err,error,*999)
+                    END IF
+                  ELSE
+                    CALL FlagError("Equations are not associated.",err,error,*999)
+                  END IF
+                ELSE
+                  CALL FlagError("Solver mapping is not associated.",err,error,*999)
+                END IF
+              END IF ! solver equations associated
+              ! Update any multiscale boundary values (coupled 0D or non-reflecting)
+              CALL NavierStokes_UpdateMultiscaleBoundary(EQUATIONS_SET,BOUNDARY_CONDITIONS,TIME_INCREMENT,err,error,*999)
+
+          CASE DEFAULT
+            localError="Problem subtype "//TRIM(NumberToVString(CONTROL_LOOP%PROBLEM%SPECIFICATION(3),"*",err,error))// &
+              & " is not valid for a Navier-Stokes equation fluid type of a Multi-physics problem class."
+            CALL FlagError(localError,err,error,*999)
+          END SELECT
+
+        ELSE
+          CALL FlagError("Problem is not associated.",err,error,*999)
+        END IF
+      ELSE
+        CALL FlagError("Solver is not associated.",err,error,*999)
+      END IF
+    ELSE
+      CALL FlagError("Control loop is not associated.",err,error,*999)
+    END IF
+
+    EXITS("NavierStokesDiffAdvDiff_PreSolveBoundaryConditions")
+    RETURN
+999 ERRORS("NavierStokesDiffAdvDiff_PreSolveBoundaryConditions",err,error)
+    EXITS("NavierStokesDiffAdvDiff_PreSolveBoundaryConditions")
+    RETURN 1
+
+  END SUBROUTINE NavierStokesDiffAdvDiff_PreSolveBoundaryConditions
+
+  !
+  !================================================================================================================================
+  !
+
+  !>Sets up the Navier-Stokes diffusion advection-diffusion problem post solve.
+  SUBROUTINE NavierStokesDiffAdvDiff_PostSolve(controlLoop,SOLVER,ERR,ERROR,*)
+
+    !Argument variables
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: controlLoop !<A pointer to the control loop to solve.
     TYPE(SOLVER_TYPE), POINTER :: SOLVER!<A pointer to the solver
     INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
 
     !Local Variables
-    TYPE(VARYING_STRING) :: LOCAL_ERROR
+    TYPE(VARYING_STRING) :: localError
     INTEGER(INTG) :: equationsSetIdx,elemIdx,arteryNode,MODEL,elemNum,nodeIdx,numberOfElementNodes,node
     TYPE(SOLVER_TYPE), POINTER :: solverAdvectionDiffusion, solverDiffusion  !<A pointer to the solvers !Elias
     TYPE(EQUATIONS_SET_TYPE), POINTER :: equationsSetDiffusion,equationsSetAdvectionDiffusion
@@ -1897,56 +2248,60 @@ CONTAINS
     TYPE(coupledElementsType) :: coupledElements
     INTEGER(INTG) :: node1,node2,arteryElemIdx,tissueElemIdx,arteryElement
     INTEGER(INTG), PARAMETER :: AVERAGE=1,ELEMENT_BASED=2,NO_COUPLED=3
+    INTEGER(INTG) :: iteration
 
     ENTERS("NavierStokesDiffAdvDiff_PostSolve",ERR,ERROR,*999)
 
-    IF(ASSOCIATED(CONTROL_LOOP)) THEN
+    IF(ASSOCIATED(controlLoop)) THEN
       IF(ASSOCIATED(SOLVER)) THEN
-        IF(ASSOCIATED(CONTROL_LOOP%PROBLEM)) THEN
-          IF(.NOT.ALLOCATED(control_loop%problem%specification)) THEN
+        IF(ASSOCIATED(controlLoop%PROBLEM)) THEN
+          IF(.NOT.ALLOCATED(controlLoop%problem%specification)) THEN
             CALL FlagError("Problem specification is not allocated.",err,error,*999)
-          ELSE IF(SIZE(control_loop%problem%specification,1)<3) THEN
+          ELSE IF(SIZE(controlLoop%problem%specification,1)<3) THEN
             CALL FlagError("Problem specification must have three entries for a diffusion-advection diffusion problem.", &
               & err,error,*999)
           END IF
-          SELECT CASE(CONTROL_LOOP%PROBLEM%SPECIFICATION(3))
+          SELECT CASE(controlLoop%PROBLEM%SPECIFICATION(3))
           CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
-            IF(SOLVER%GLOBAL_NUMBER==1) THEN
-              !Output results
-            !  CALL ADVECTION_DIFFUSION_EQUATION_POST_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-            ELSE IF(SOLVER%GLOBAL_NUMBER==2) THEN
-              !Output results
-            !  CALL DIFFUSION_EQUATION_POST_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-            END IF
 
-
-
-
-            CALL NavierStokesDiffAdvDiff_PostSolveOutputData(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            
+            SELECT CASE(SOLVER%SOLVE_TYPE)
+            CASE(SOLVER_NONLINEAR_TYPE)
+              ! Characteristic solver- copy branch Q,A values to new parameter set
+              dependentField=>SOLVER%SOLVER_equations%SOLVER_MAPPING%EQUATIONS_SETS(1)%ptr%DEPENDENT%DEPENDENT_FIELD
+              CALL Field_VariableGet(dependentField,FIELD_U_VARIABLE_TYPE,fieldVariable,err,error,*999)
+              IF(.NOT.ASSOCIATED(fieldVariable%PARAMETER_SETS%SET_TYPE(FIELD_UPWIND_VALUES_SET_TYPE)%ptr)) THEN
+                CALL FIELD_PARAMETER_SET_CREATE(dependentField,FIELD_U_VARIABLE_TYPE, &
+                 & FIELD_UPWIND_VALUES_SET_TYPE,err,error,*999)
+              END IF
+              iteration = controlLoop%WHILE_LOOP%ITERATION_NUMBER
+              IF(iteration == 1) THEN
+                CALL Field_ParameterSetsCopy(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
+                 & FIELD_UPWIND_VALUES_SET_TYPE,1.0_DP,err,error,*999)
+              END IF
+            CASE(SOLVER_DYNAMIC_TYPE)
+              SELECT CASE(controlLoop%loop_type)
+              CASE(PROBLEM_CONTROL_WHILE_LOOP_TYPE)
+                ! Navier-Stokes solver: do nothing
+              CASE(PROBLEM_CONTROL_SIMPLE_TYPE)
+! --- B i o h e a t  S o l v e r --- !
+                CALL NavierStokesDiffAdvDiff_PostSolveOutputData(controlLoop,SOLVER,ERR,ERROR,*999)
+              CASE DEFAULT
+                localError="The control type of "//TRIM(NumberToVString(controlLoop%loop_type,"*",err,error))// &
+                  & " is invalid for a coupled Navier-Stokes & diffusion & advection-diffusion proplem type."
+                CALL FlagError(localError,err,error,*999)
+              END SELECT
+            CASE DEFAULT
+              localError="The solver type of "//TRIM(NumberToVString(SOLVER%SOLVE_TYPE,"*",err,error))// &
+                & " is invalid for a 1D Navier-Stokes problem."
+              CALL FlagError(localError,err,error,*999)
+            END SELECT
           CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
             MODEL=NO_COUPLED
             SELECT CASE(MODEL)
             CASE(NO_COUPLED)
               !Do nothing
               !Output results
-              CALL NavierStokesDiffAdvDiff_PostSolveOutputData(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
+              CALL NavierStokesDiffAdvDiff_PostSolveOutputData(controlLoop,SOLVER,ERR,ERROR,*999)
             CASE(AVERAGE)
               IF(SOLVER%GLOBAL_NUMBER==2) THEN
 
@@ -2007,7 +2362,7 @@ CONTAINS
 
                 !Output results
   !                CALL ADVECTION_DIFFUSION_EQUATION_POST_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-                CALL NavierStokesDiffAdvDiff_PostSolveOutputData(CONTROL_LOOP,SOLVER,ERR,ERROR,*999) !Elias
+                CALL NavierStokesDiffAdvDiff_PostSolveOutputData(controlLoop,SOLVER,ERR,ERROR,*999) !Elias
   !                CALL Advection_PostSolve(solver,err,error,*999)
               ELSE IF(SOLVER%GLOBAL_NUMBER==3) THEN
 
@@ -2063,7 +2418,7 @@ CONTAINS
 
                 !Output results
   !                CALL DIFFUSION_EQUATION_POST_SOLVE(CONTROL_LOOP,SOLVER,ERR,ERROR,*999) !Elias
-                CALL NavierStokesDiffAdvDiff_PostSolveOutputData(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
+                CALL NavierStokesDiffAdvDiff_PostSolveOutputData(controlLoop,SOLVER,ERR,ERROR,*999)
               ENDIF
             CASE(ELEMENT_BASED)
               !Update Tissue source field for the elements with artery passing through
@@ -2349,14 +2704,14 @@ CONTAINS
 
               END IF
               !Output results
-              CALL NavierStokesDiffAdvDiff_PostSolveOutputData(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
+              CALL NavierStokesDiffAdvDiff_PostSolveOutputData(controlLoop,SOLVER,ERR,ERROR,*999)
             CASE DEFAULT
               CALL FlagError(""//TRIM(NUMBER_TO_VSTRING(MODEL,"*",ERR,ERROR))//" model is not implemented",ERR,ERROR,*999)
             END SELECT
           CASE DEFAULT
-            LOCAL_ERROR="Problem subtype "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(3),"*",ERR,ERROR))// &
-              & " is not valid for a diffusion & advection-diffusion type of a multi physics problem class."
-            CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+            localError="Problem subtype "//TRIM(NUMBER_TO_VSTRING(controlLoop%PROBLEM%SPECIFICATION(3),"*",ERR,ERROR))// &
+              & " is not valid for a Navier-Stokes & diffusion & advection-diffusion type of a multi physics problem class."
+            CALL FlagError(localError,ERR,ERROR,*999)
           END SELECT
         ELSE
           CALL FlagError("Problem is not associated.",ERR,ERROR,*999)
@@ -2378,11 +2733,85 @@ CONTAINS
   !================================================================================================================================
   !
 
-  !>Sets up the diffuion-diffusion problem post solve output data.
-  SUBROUTINE NavierStokesDiffAdvDiff_PostSolveOutputData(CONTROL_LOOP,SOLVER,ERR,ERROR,*)
+  !>Runs after each control loop iteration
+  SUBROUTINE NavierStokesDiffAdvDiff_ControlLoopPostLoop(controlLoop,err,error,*)
 
     !Argument variables
-    TYPE(CONTROL_LOOP_TYPE), POINTER :: CONTROL_LOOP !<A pointer to the control loop to solve.
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: controlLoop !<A pointer to the control loop.
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    !Local Variables
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: subloop,subloop2,subloop3,iterativeWhileLoop2,iterativeWhileLoop3
+    TYPE(SOLVER_TYPE), POINTER :: navierStokesSolver,navierStokesSolver3D,navierStokesSolver1D,solver
+    TYPE(SOLVER_MAPPING_TYPE), POINTER :: solverMapping,solverMapping2
+    TYPE(EQUATIONS_SET_TYPE), POINTER :: equationsSet,equationsSet2,coupledEquationsSet
+    TYPE(FIELD_TYPE), POINTER :: dependentField
+    TYPE(FIELD_VARIABLE_TYPE), POINTER :: fieldVariable
+    TYPE(VARYING_STRING) :: localError
+    INTEGER(INTG) :: numberOfSolvers,solverIdx,solverIdx2,equationsSetIdx,equationsSetIdx2
+    INTEGER(INTG) :: subloopIdx,subloopIdx2,subloopIdx3,iteration3D1D
+    REAL(DP) :: absolute3D0DTolerance,relative3D0DTolerance
+    LOGICAL :: convergedFlag
+    character(70) :: label
+
+    ENTERS("NavierStokesDiffAdvDiff_ControlLoopPostLoop",err,error,*999)
+
+    NULLIFY(equationsSet)
+    NULLIFY(coupledEquationsSet)
+    NULLIFY(dependentField)
+    NULLIFY(fieldVariable)
+    convergedFlag = .FALSE.
+    absolute3D0DTolerance = 0.0_DP
+    relative3D0DTolerance = 0.0_DP
+
+    IF(ASSOCIATED(controlLoop)) THEN
+      SELECT CASE(controlLoop%PROBLEM%specification(3))
+
+      CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+        SELECT CASE(controlLoop%LOOP_TYPE)
+        CASE(PROBLEM_CONTROL_SIMPLE_TYPE)
+          ! Do nothing
+        CASE(PROBLEM_CONTROL_TIME_LOOP_TYPE)
+          IF(controlLoop%CONTROL_LOOP_LEVEL/=0) THEN
+            ! inner time loop - export data?
+            navierStokesSolver=>controlLoop%SUB_LOOPS(1)%ptr%SOLVERS%SOLVERS(2)%ptr
+            CALL NAVIER_STOKES_POST_SOLVE_OUTPUT_DATA(navierStokesSolver,err,error,*999)
+          END IF
+        CASE(PROBLEM_CONTROL_WHILE_LOOP_TYPE)
+          IF(controlLoop%CONTROL_LOOP_LEVEL>1) THEN
+            navierStokesSolver=>controlLoop%SOLVERS%SOLVERS(2)%ptr
+            CALL NavierStokes_CoupleCharacteristics(controlLoop,navierStokesSolver,err,error,*999)
+          END IF
+        CASE DEFAULT
+          localError="The control loop type of "//TRIM(NumberToVString(controlLoop%LOOP_TYPE,"*",err,error))// &
+            & " is invalid for a Coupled 1D0D Navier-Stokes problem."
+          CALL FlagError(localError,err,error,*999)
+        END SELECT
+
+      CASE DEFAULT
+        localError="Problem subtype "//TRIM(NumberToVString(controlLoop%PROBLEM%specification(3),"*",err,error))// &
+          & " is not valid for a Navier-Stokes fluid type of a fluid mechanics problem class."
+        CALL FlagError(localError,err,error,*999)
+      END SELECT
+    ELSE
+      CALL FlagError("Control loop is not associated.",err,error,*999)
+    END IF
+
+    EXITS("NavierStokesDiffAdvDiff_ControlLoopPostLoop")
+    RETURN
+999 ERRORSEXITS("NavierStokesDiffAdvDiff_ControlLoopPostLoop",err,error)
+    RETURN 1
+
+  END SUBROUTINE NavierStokesDiffAdvDiff_ControlLoopPostLoop
+  !
+  !================================================================================================================================
+  !
+
+  !>Sets up the diffuion-diffusion problem post solve output data.
+  SUBROUTINE NavierStokesDiffAdvDiff_PostSolveOutputData(controlLoop,SOLVER,ERR,ERROR,*)
+
+    !Argument variables
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: controlLoop !<A pointer to the control loop to solve.
     TYPE(SOLVER_TYPE), POINTER :: SOLVER !<A pointer to the solver
     INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
@@ -2394,7 +2823,7 @@ CONTAINS
     TYPE(SOLVER_MAPPING_TYPE), POINTER :: SOLVER_MAPPING !<A pointer to the solver mapping
     TYPE(EQUATIONS_SET_TYPE), POINTER :: EQUATIONS_SET !<A pointer to the equations set
     TYPE(VARYING_STRING) :: localError, METHOD, FILENAME
-
+    INTEGER(INTG) :: energy,bioheat
 
     REAL(DP) :: CURRENT_TIME,TIME_INCREMENT
     INTEGER(INTG) :: EQUATIONS_SET_IDX,CURRENT_LOOP_ITERATION,OUTPUT_ITERATION_NUMBER
@@ -2429,21 +2858,19 @@ CONTAINS
 
     ENTERS("NavierStokesDiffAdvDiff_PostSolveOutputData",ERR,ERROR,*999)
 
-    IF(ASSOCIATED(CONTROL_LOOP)) THEN
+    IF(ASSOCIATED(controlLoop)) THEN
       IF(ASSOCIATED(SOLVER)) THEN
-        IF(ASSOCIATED(CONTROL_LOOP%PROBLEM)) THEN
-          IF(.NOT.ALLOCATED(control_loop%problem%specification)) THEN
+        IF(ASSOCIATED(controlLoop%PROBLEM)) THEN
+          IF(.NOT.ALLOCATED(controlLoop%problem%specification)) THEN
             CALL FlagError("Problem specification is not allocated.",err,error,*999)
-          ELSE IF(SIZE(control_loop%problem%specification,1)<3) THEN
+          ELSE IF(SIZE(controlLoop%problem%specification,1)<3) THEN
             CALL FlagError("Problem specification must have three entries for a diffusion-advection diffusion problem.", &
               & err,error,*999)
           END IF
-          SELECT CASE(CONTROL_LOOP%PROBLEM%SPECIFICATION(3))
-            CASE(PROBLEM_COUPLED_SOURCE_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
-                !CALL ADVECTION_DIFFUSION_EQUATION_POST_SOLVE_OUTPUT_DATA(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-                !CALL DIFFUSION_EQUATION_POST_SOLVE_OUTPUT_DATA(CONTROL_LOOP,SOLVER,ERR,ERROR,*999)
-            CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
-              CALL CONTROL_LOOP_CURRENT_TIMES_GET(CONTROL_LOOP,CURRENT_TIME,TIME_INCREMENT,err,error,*999) !Elias */
+          SELECT CASE(controlLoop%PROBLEM%SPECIFICATION(3))
+          CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE, &
+            & PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+              CALL CONTROL_LOOP_CURRENT_TIMES_GET(controlLoop,CURRENT_TIME,TIME_INCREMENT,err,error,*999) !Elias */
               SOLVER_EQUATIONS=>SOLVER%SOLVER_EQUATIONS
               IF(ASSOCIATED(SOLVER_EQUATIONS)) THEN
                 SOLVER_MAPPING=>SOLVER_EQUATIONS%SOLVER_MAPPING
@@ -2452,11 +2879,11 @@ CONTAINS
                   DO equations_set_idx=1,SOLVER_MAPPING%NUMBER_OF_EQUATIONS_SETS
                     EQUATIONS_SET=>SOLVER_MAPPING%EQUATIONS_SETS(equations_set_idx)%ptr
 
-                    CURRENT_LOOP_ITERATION=CONTROL_LOOP%TIME_LOOP%ITERATION_NUMBER
-                    OUTPUT_ITERATION_NUMBER=CONTROL_LOOP%TIME_LOOP%OUTPUT_NUMBER !FREQUENCY
+                    CURRENT_LOOP_ITERATION=controlLoop%TIME_LOOP%ITERATION_NUMBER
+                    OUTPUT_ITERATION_NUMBER=controlLoop%TIME_LOOP%OUTPUT_NUMBER !FREQUENCY
 
                     IF(OUTPUT_ITERATION_NUMBER/=0) THEN
-                      IF(CONTROL_LOOP%TIME_LOOP%CURRENT_TIME<=CONTROL_LOOP%TIME_LOOP%STOP_TIME) THEN
+                      IF(controlLoop%TIME_LOOP%CURRENT_TIME<=controlLoop%TIME_LOOP%STOP_TIME) THEN
                         IF(CURRENT_LOOP_ITERATION<10) THEN
                           WRITE(OUTPUT_FILE,'("TIME_STEP_000",I0)') CURRENT_LOOP_ITERATION
                         ELSE IF(CURRENT_LOOP_ITERATION<100) THEN
@@ -2471,9 +2898,23 @@ CONTAINS
   !          FILE="TRANSIENT_OUTPUT"
 !!!!!!!!ADAPT THIS TO WORK WITH DIFFUSION AND NOT JUST FLUID MECHANICS
                          METHOD="FORTRAN"
-                        IF(SOLVER%GLOBAL_NUMBER==2) THEN
+                        !In case of thermoregulation energy is solver 2 and bioheat is solver 3 but in coupled version
+                        ! energy is solver 1 and bioheat is solver2
+                        SELECT CASE(controlLoop%PROBLEM%SPECIFICATION(3))
+                        CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
+                          energy=2
+                          bioheat=3
+                        CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+                          energy=1
+                          bioheat=2
+                        CASE DEFAULT
+                          LOCAL_ERROR="Problem subtype "//TRIM(NUMBER_TO_VSTRING(controlLoop%PROBLEM%SPECIFICATION(3),"*", &
+                            & ERR,ERROR))//" is not valid for a coupled Navier-Stokes & diffusion & advection-diffusion type."
+                          CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+                        END SELECT
+                        IF(SOLVER%GLOBAL_NUMBER==energy) THEN
                           FILENAME = "./outputArtery/"//"MainTime_"//TRIM(NUMBER_TO_VSTRING(CURRENT_LOOP_ITERATION,"*",ERR,ERROR))
-                        ELSE IF(SOLVER%GLOBAL_NUMBER==3) THEN
+                        ELSE IF(SOLVER%GLOBAL_NUMBER==bioheat) THEN
                           FILENAME = "./outputDiffusion/"//"MainTime_"//TRIM(NUMBER_TO_VSTRING(CURRENT_LOOP_ITERATION,"*",ERR,ERROR))
                         END IF
                          EXPORT_FIELD=.TRUE.
@@ -2484,13 +2925,13 @@ CONTAINS
 !                             CALL FLUID_MECHANICS_IO_WRITE_CMGUI(EQUATIONS_SET%REGION,EQUATIONS_SET%GLOBAL_NUMBER,FILE, &
 !                               & err,error,*999)
                              CALL FIELD_IO_NODES_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
-                             IF(SOLVER%GLOBAL_NUMBER==2)THEN
+                             IF(SOLVER%GLOBAL_NUMBER==energy)THEN
                                IF(firstCallArtery)THEN
 
                                  CALL FIELD_IO_ELEMENTS_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
                                  firstCALLArtery=.FALSE.
                                END IF
-                             ELSE IF(SOLVER%GLOBAL_NUMBER==3)THEN
+                             ELSE IF(SOLVER%GLOBAL_NUMBER==bioheat)THEN
                                IF(firstCallTissue)THEN
 
                                  CALL FIELD_IO_ELEMENTS_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
@@ -2504,7 +2945,7 @@ CONTAINS
                              CALL cpu_time(start)
                              WRITE(STR1,'(f4.2)') TIME_INCREMENT
                              WRITE(STR2,'(f6.1)') start
-                             stopTime=CONTROL_LOOP%TIME_LOOP%STOP_TIME
+                             stopTime=controlLoop%TIME_LOOP%STOP_TIME
                              stopIteration=(stopTime/TIME_INCREMENT)
                              n=REAL(CURRENT_LOOP_ITERATION)/stopIteration*50
                              WRITE(STR3,*) CURRENT_LOOP_ITERATION
@@ -2538,10 +2979,10 @@ CONTAINS
                   ENDDO
                 ENDIF
               ENDIF !Elias /*
-            CASE DEFAULT
-              LOCAL_ERROR="Problem subtype "//TRIM(NUMBER_TO_VSTRING(CONTROL_LOOP%PROBLEM%SPECIFICATION(3),"*",ERR,ERROR))// &
-                & " is not valid for a diffusion & advection-diffusion type of a multi physics problem class."
-              CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+          CASE DEFAULT
+            LOCAL_ERROR="Problem subtype "//TRIM(NUMBER_TO_VSTRING(controlLoop%PROBLEM%SPECIFICATION(3),"*",ERR,ERROR))// &
+              & " is not valid for a coupled Navier-Stokes & diffusion & advection-diffusion type of a multi physics problem class."
+            CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
           END SELECT
         ELSE
           CALL FlagError("Problem is not associated.",ERR,ERROR,*999)

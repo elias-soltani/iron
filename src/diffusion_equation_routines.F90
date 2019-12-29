@@ -1168,6 +1168,8 @@ CONTAINS
     INTEGER(INTG), POINTER :: EQUATIONS_SET_FIELD_DATA(:)
     INTEGER(INTG), ALLOCATABLE :: VARIABLE_TYPES(:),VARIABLE_U_TYPES(:),COUPLING_MATRIX_STORAGE_TYPE(:), &
       & COUPLING_MATRIX_STRUCTURE_TYPE(:)
+    INTEGER(INTG) :: MATERIAL_FIELD_NUMBER_OF_VARIABLES,MATERIAL_FIELD_NUMBER_OF_COMPONENTS2
+
 
     ENTERS("Diffusion_EquationsSetLinearSetup",err,error,*999)
 
@@ -1570,6 +1572,10 @@ CONTAINS
             IF(ASSOCIATED(EQUATIONS_MATERIALS)) THEN
               IF(EQUATIONS_MATERIALS%MATERIALS_FIELD_AUTO_CREATED) THEN
                 !Create the auto created materials field
+                !One variable for constant parameters such as muscle volume  */Elias
+                MATERIAL_FIELD_NUMBER_OF_VARIABLES=2
+                ! MATERIAL_FIELD_NUMBER_OF_COMPONENTS1=8
+                MATERIAL_FIELD_NUMBER_OF_COMPONENTS2=3 !/*Elias
                 SELECT CASE(EQUATIONS_SET%SPECIFICATION(3))
                 CASE(EQUATIONS_SET_NO_SOURCE_DIFFUSION_SUBTYPE, &
                   & EQUATIONS_SET_CONSTANT_SOURCE_DIFFUSION_SUBTYPE, &
@@ -1588,17 +1594,22 @@ CONTAINS
                     & err,error,*999)
                   CALL FIELD_GEOMETRIC_FIELD_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,EQUATIONS_SET%GEOMETRY% &
                     & GEOMETRIC_FIELD,err,error,*999)
-                  CALL FIELD_NUMBER_OF_VARIABLES_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,1,err,error,*999)
-                  CALL FIELD_VARIABLE_TYPES_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,[FIELD_U_VARIABLE_TYPE], &
-                    & err,error,*999)
+                  CALL FIELD_NUMBER_OF_VARIABLES_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD, &
+                    & MATERIAL_FIELD_NUMBER_OF_VARIABLES,err,error,*999)
+                  CALL FIELD_VARIABLE_TYPES_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD, &
+                    & [FIELD_U_VARIABLE_TYPE,FIELD_V_VARIABLE_TYPE],err,error,*999) !Modified by Elias
                   CALL FIELD_VARIABLE_LABEL_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                     & "Materials",ERR,ERROR,*999)
                   CALL FIELD_DIMENSION_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                     & FIELD_VECTOR_DIMENSION_TYPE,err,error,*999)
+                    CALL FIELD_DIMENSION_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_V_VARIABLE_TYPE, &
+                      & FIELD_VECTOR_DIMENSION_TYPE,err,error,*999) !Added by Elias
 !                  CALL FIELD_DIMENSION_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
 !                    & FIELD_VECTOR_DIMENSION_TYPE,err,error,*999) !Elias
                   CALL FIELD_DATA_TYPE_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                     & FIELD_DP_TYPE,err,error,*999)
+                  CALL FIELD_DATA_TYPE_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_V_VARIABLE_TYPE, &
+                    & FIELD_DP_TYPE,err,error,*999) !Added by Elias
                   CALL Field_NumberOfComponentsGet(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
                     & NUMBER_OF_DIMENSIONS,err,error,*999)
                   IF(EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_NO_SOURCE_DIFFUSION_SUBTYPE .OR. &
@@ -1620,6 +1631,8 @@ CONTAINS
                   !Set the number of materials components
                   CALL FIELD_NUMBER_OF_COMPONENTS_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                     & NUMBER_OF_MATERIALS_COMPONENTS,err,error,*999)
+                  CALL FIELD_NUMBER_OF_COMPONENTS_SET_AND_LOCK(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_V_VARIABLE_TYPE, &
+                    & MATERIAL_FIELD_NUMBER_OF_COMPONENTS2,err,error,*999) !Added by Elias
                   !Default the k materials components to the geometric interpolation setup with constant interpolation
                   DO component_idx=1,NUMBER_OF_DIMENSIONS
                     CALL FIELD_COMPONENT_MESH_COMPONENT_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
@@ -1631,6 +1644,16 @@ CONTAINS
                     CALL FIELD_COMPONENT_MESH_COMPONENT_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_U_VARIABLE_TYPE, &
                       & component_idx,GEOMETRIC_MESH_COMPONENT,err,error,*999)
                   ENDDO !component_idx
+
+
+
+                  DO component_idx=1,MATERIAL_FIELD_NUMBER_OF_COMPONENTS2 !Elias(muscle volume)(MU,RHO,alpha,pressureExternal,LengthScale,TimeScale,MassScale)
+                    CALL FIELD_COMPONENT_INTERPOLATION_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_V_VARIABLE_TYPE, &
+                      & component_idx,FIELD_CONSTANT_INTERPOLATION,err,error,*999) !Added by Elias
+                    CALL FIELD_COMPONENT_MESH_COMPONENT_SET(EQUATIONS_MATERIALS%MATERIALS_FIELD,FIELD_V_VARIABLE_TYPE, &
+                      & component_idx,GEOMETRIC_MESH_COMPONENT,err,error,*999) ! Added by Elias
+                  END DO !Elias
+
                   !Default the source materials components to the first component geometric interpolation with constant
                   !interpolation
 !Elias
@@ -4405,7 +4428,7 @@ CONTAINS
 !                             CALL FLUID_MECHANICS_IO_WRITE_CMGUI(EQUATIONS_SET%REGION,EQUATIONS_SET%GLOBAL_NUMBER,FILE, &
 !                               & err,error,*999)
                              CALL FIELD_IO_NODES_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
-!                             CALL FIELD_IO_ELEMENTS_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
+                             CALL FIELD_IO_ELEMENTS_EXPORT(DEPENDENT_REGION%FIELDS,FILENAME,METHOD,ERR,ERROR,*999)
                              CALL WRITE_STRING(GENERAL_OUTPUT_TYPE,OUTPUT_FILE,err,error,*999)
                              CALL WRITE_STRING(GENERAL_OUTPUT_TYPE,"...",err,error,*999)
 

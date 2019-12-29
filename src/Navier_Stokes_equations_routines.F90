@@ -5927,10 +5927,10 @@ CONTAINS
                 END IF !version>1
               END DO !loop nodes
               ! Update any distributed pressure field values
-              CALL Field_ParameterSetUpdateStart(dependentField,FIELD_U2_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
-                & err,error,*999)
-              CALL Field_ParameterSetUpdateFinish(dependentField,FIELD_U2_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
-                & err,error,*999)
+              ! CALL Field_ParameterSetUpdateStart(dependentField,FIELD_U2_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
+              !   & err,error,*999)
+              ! CALL Field_ParameterSetUpdateFinish(dependentField,FIELD_U2_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
+              !   & err,error,*999) ! Commented by Elias
             END IF
           END IF
 
@@ -13813,7 +13813,7 @@ CONTAINS
     REAL(DP) :: l2ErrorA(100),aCharacteristic(7),aNavierStokes(7),totalErrorW,totalErrorQ,totalErrorA
     REAL(DP) :: totalErrorMass,totalErrorMomentum
     REAL(DP) :: rho,alpha,normalWave,A0_PARAM,E_PARAM,H_PARAM,beta,aNew,penaltyCoeff
-    LOGICAL :: branchConverged(100),localConverged,MPI_LOGICAL,boundaryNode,fluxDiverged
+    LOGICAL :: branchConverged(100),localConverged,boundaryNode,fluxDiverged
     LOGICAL, ALLOCATABLE :: globalConverged(:)
 
     ENTERS("NavierStokes_CoupleCharacteristics",err,error,*999)

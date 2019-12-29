@@ -1227,7 +1227,8 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
     REAL(DP), ALLOCATABLE :: VOLUMES(:) !<VOLUMES(ne). The volume of the ne'th element in the field decomposition.
     INTEGER(INTG) :: NUMBER_OF_FIELDS_USING !<The number of fields that use these geometric parameters for their scaling.
     TYPE(FIELD_PTR_TYPE), POINTER :: FIELDS_USING(:) !< FIELDS_USINGS(field_idx). A pointer to the field_idx'th field that uses these geometric parameters for its scaling.
-    REAL(DP) :: surfaceArea !<Elias The surface area of all boundary faces. I thinks the calculation is wrong for the whole body at least.
+    REAL(DP) :: surfaceArea !<Elias The surface area of all boundary faces.
+    REAL(DP) :: totalVolume !<Elias The total volume of the geometry.
   END TYPE FIELD_GEOMETRIC_PARAMETERS_TYPE
 
   !Elias */

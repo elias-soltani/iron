@@ -1294,6 +1294,10 @@ MODULE FIELD_ROUTINES
 
   PUBLIC MESH_EMBEDDING_PUSH_DATA, MESH_EMBEDDING_PULL_GAUSS_POINT_DATA, FIELD_PARAMETER_SET_GET_GAUSS_POINT_COORD
 
+  PUBLIC Field_VariableVolumeIntegral
+
+  PUBLIC field_VariableSurfaceIntegral
+
 CONTAINS
 
   !
@@ -11368,6 +11372,7 @@ CONTAINS
 !          ENDIF
           CALL Field_GeometricParametersElementVolumesCalculate(FIELD,ERR,ERROR,*999)
           CALL Field_GeometricParametersAreaCalculate(field,err,error,*999)
+          CALL field_GeometricParametersTotalVolume(field,err,error,*999)
         ELSE
           LOCAL_ERROR="Field number "//TRIM(NumberToVString(FIELD%USER_NUMBER,"*",ERR,ERROR))//" is not a geometric field."
           CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
@@ -32349,7 +32354,7 @@ CONTAINS
   SUBROUTINE Field_GeometricParametersAreaCalculate(field,err,error,*)
 
     !Argument variables
-    TYPE(FIELD_TYPE), POINTER :: field !<A pointer to the field to calculate the face areas for
+    TYPE(FIELD_TYPE), POINTER :: field !<A pointer to the geometric field to calculate the face areas for
     INTEGER(INTG), INTENT(OUT) :: err !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
     !Local Variables
@@ -32482,11 +32487,422 @@ CONTAINS
 
     EXITS("Field_GeometricParametersAreaCalculate")
     RETURN
-999 ERRORS("Field_GeometricParametersAreaCalculate",err,error)
-    EXITS("Field_GeometricParametersAreaCalculate")
+999 ERRORSEXITS("Field_GeometricParametersAreaCalculate",err,error)
     RETURN 1
 
   END SUBROUTINE Field_GeometricParametersAreaCalculate
+
+  !
+  !================================================================================================================================
+  !
+  !Elias
+  !>Calculates the volume integral of a component of field variable over the entire volume.
+  Subroutine Field_VariableVolumeIntegral(field,variableType,componentNumber,integralValue,err,error,*)
+
+    !Argument variables
+    TYPE(FIELD_TYPE), POINTER :: field !<A pointer to the field to get the volume integral for
+    INTEGER(INTG),  INTENT(IN) :: variableType !<The field variable type of the field variable component to set \see FIELD_ROUTINES_VariableTypes,FIELD_ROUTINES
+    INTEGER(INTG), INTENT(IN) :: componentNumber !<The component number of the field variable to calculate the integral
+    REAL(DP), INTENT(OUT) :: integralValue !<The value for volume integral of variable component
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    !Local variables
+    TYPE(DOMAIN_TYPE), POINTER :: domain
+    TYPE(BASIS_TYPE), POINTER:: basis
+    TYPE(FIELD_TYPE), POINTER :: geometricField
+    TYPE(DECOMPOSITION_TYPE), POINTER :: decomposition
+    TYPE(DOMAIN_ELEMENTS_TYPE), POINTER :: domainElements
+    TYPE(DOMAIN_TOPOLOGY_TYPE), POINTER :: domainTopology
+    TYPE(DECOMPOSITION_TOPOLOGY_TYPE), POINTER :: decompositionTopology
+    TYPE(QUADRATURE_SCHEME_TYPE), POINTER :: quadratureScheme
+    TYPE(FIELD_INTERPOLATION_PARAMETERS_PTR_TYPE), POINTER :: interpolationParameters(:)
+    TYPE(FIELD_INTERPOLATED_POINT_PTR_TYPE), POINTER :: interpolatedPoint(:)
+    TYPE(FIELD_INTERPOLATED_POINT_METRICS_PTR_TYPE), POINTER :: interpolatedPointMetrics(:)
+    INTEGER(INTG) :: gaussIdx,nodeNumber,globalDof,ms,elemIdx,derivIdx,nodeIdx,MPI_IERROR
+    TYPE(VARYING_STRING) :: localError
+    REAL(DP) :: phim,Tn,value
+    LOGICAL :: dependentGeometry
+    TYPE(FIELD_VARIABLE_TYPE), POINTER :: fieldVariable
+
+    ENTERS("Field_VariableVolumeIntegral",err,error,*999)
+
+    IF(ASSOCIATED(field)) THEN
+      IF(field%FIELD_FINISHED) THEN
+        IF(variableType>=1.AND.variableType<=FIELD_NUMBER_OF_VARIABLE_TYPES) THEN
+          fieldVariable=>FIELD%VARIABLE_TYPE_MAP(variableType)%PTR
+          IF(ASSOCIATED(fieldVariable)) THEN
+            IF(componentNumber>=1.AND.componentNumber<=fieldVariable%NUMBER_OF_COMPONENTS) THEN
+              ! get the geometry
+              NULLIFY(geometricField)
+              CALL Field_GeometricGeneralFieldGet(field,geometricField,dependentGeometry,err,error,*999)
+              IF(.NOT.ASSOCIATED(geometricField)) CALL FlagError("Field is not associated.",err,error,*999)
+              !Initialise interpolated point metrics
+              NULLIFY(interpolationParameters)
+              NULLIFY(interpolatedPoint)
+              NULLIFY(interpolatedPointMetrics)
+              CALL Field_InterpolationParametersInitialise(geometricField,interpolationParameters,err,error,*999)
+              CALL Field_InterpolatedPointsInitialise(interpolationParameters,interpolatedPoint,err,error,*999)
+              CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoint,interpolatedPointMetrics,err,error,*999)
+
+              NULLIFY(decomposition)
+              CALL Field_DecompositionGet(geometricField,decomposition,err,error,*999)
+              NULLIFY(decompositionTopology)
+              CALL Decomposition_TopologyGet(decomposition,decompositionTopology,err,error,*999)
+              NULLIFY(domain)
+              CALL Decomposition_DomainGet(decomposition,0,domain,err,error,*999)
+              NULLIFY(domainTopology)
+              CALL Domain_TopologyGet(domain,domainTopology,err,error,*999)
+              NULLIFY(domainElements)
+              CALL DomainTopology_ElementsGet(domainTopology,domainElements,err,error,*999)
+
+              SELECT CASE(fieldVariable%COMPONENTS(componentNumber)%INTERPOLATION_TYPE)
+              CASE(FIELD_CONSTANT_INTERPOLATION)
+                localError="Not implemented for the constant interpolation "
+                CALL FLAG_error(localError,err,error,*999)
+              CASE(FIELD_NODE_BASED_INTERPOLATION)
+
+
+
+                integralValue=0.0_DP
+                !Loop over domain elements
+                DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
+                  basis=>domainElements%elements(elemIdx)%basis
+                  IF(.NOT.ASSOCIATED(basis)) THEN
+                    CALL FlagError("basis is not associated.",err,error,*999)
+                  END IF
+                  quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+                  IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+                    CALL FlagError("Element basis default quadrature scheme is not associated.",err,error,*999)
+                  END IF
+
+                  CALL Field_InterpolationParametersElementGet(FIELD_VALUES_SET_TYPE,elemIdx, &
+                    & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+                  !Loop over gauss points
+                  DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+                    CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                      & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+
+                    CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_VOLUME_TYPE, &
+                      & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+                    !Loop over the nodes of the element
+                    DO nodeIdx=1,basis%NUMBER_OF_NODES
+                      nodeNumber=domainElements%elements(elemIdx)%element_nodes(nodeIdx)
+                      DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+
+                        globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
+                        CALL Field_ParameterSetGetNode(field,variableType,FIELD_VALUES_SET_TYPE,1,derivIdx, &
+                          & globalDof,componentNumber,value,err,error,*999)
+
+                        ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                        phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                        integralValue=integralValue+value*phim* &
+                          & InterpolatedPointMetrics(variableType)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
+                      END DO !derivIdx
+                    END DO !nodeIdx
+                  ENDDO !gaussIdx
+                ENDDO !elementIdx
+
+                IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
+                  CALL MPI_ALLREDUCE(MPI_IN_PLACE,integralValue, &
+                  & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
+                  CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
+                END IF
+
+              CASE(FIELD_ELEMENT_BASED_INTERPOLATION)
+                localError="Not implemented for the element based interpolation "
+                CALL FLAG_error(localError,err,error,*999)
+              CASE(FIELD_GRID_POINT_BASED_INTERPOLATION)
+                localError="Not implemented for the grid point based interpolation "
+                CALL FLAG_error(localError,err,error,*999)
+              CASE(FIELD_GAUSS_POINT_BASED_INTERPOLATION)
+                localError="Not implemented for the Gauss point based interpolation "
+                CALL FLAG_error(localError,err,error,*999)
+              CASE(FIELD_DATA_POINT_BASED_INTERPOLATION)
+                localError="Not implemented for the data point based interpolation "
+                CALL FLAG_error(localError,err,error,*999)
+              CASE DEFAULT
+                localError="The field component interpolation type of "//TRIM(NumberToVString(fieldVariable% &
+                  & COMPONENTS(componentNumber)%INTERPOLATION_TYPE,"*",err,error))// &
+                  & " is invalid for component number "//TRIM(NumberToVString(componentNumber,"*",err,error))// &
+                  & " of variable type "//TRIM(NumberToVString(variableType,"*",err,error))// &
+                  & " of field number "//TRIM(NumberToVString(FIELD%USER_NUMBER,"*",err,error))//"."
+                CALL FlagError(localError,err,error,*999)
+              END SELECT
+            ELSE
+              localError="Component number "//TRIM(NumberToVString(componentNumber,"*",err,error))// &
+                & " is invalid for variable type "//TRIM(NumberToVString(variableType,"*",err,error))// &
+                & " of field number "//TRIM(NumberToVString(FIELD%USER_NUMBER,"*",err,error))//" which has "// &
+                & TRIM(NumberToVString(fieldVariable%NUMBER_OF_COMPONENTS,"*",err,error))// &
+                & " components."
+              CALL FlagError(localError,err,error,*999)
+            ENDIF
+          ELSE
+            localError="The specified field variable type of "//TRIM(NumberToVString(variableType,"*",err,error))// &
+              & " has not been defined on field number "//TRIM(NumberToVString(FIELD%USER_NUMBER,"*",err,error))//"."
+            CALL FlagError(localError,err,error,*999)
+          ENDIF
+        ELSE
+          localError="The specified variable type of "//TRIM(NumberToVString(variableType,"*",err,error))// &
+            & " is invalid. The variable type must be between 1 and  "// &
+            & TRIM(NumberToVString(FIELD_NUMBER_OF_VARIABLE_TYPES,"*",err,error))//"."
+          CALL FlagError(localError,err,error,*999)
+        ENDIF
+      ELSE
+        localError="Field number "//TRIM(NumberToVString(FIELD%USER_NUMBER,"*",err,error))// &
+          & " has not been finished."
+        CALL FlagError(localError,err,error,*999)
+      ENDIF
+    ELSE
+      CALL FlagError("Field is not associated.",err,error,*999)
+    ENDIF
+
+    EXITS("Field_VariableVolumeIntegral")
+    RETURN
+  999 ERRORSEXITS("Field_VariableVolumeIntegral",err,error)
+    RETURN 1
+  END SUBROUTINE Field_VariableVolumeIntegral
+
+  !
+  !================================================================================================================================
+  !
+
+ !Elias
+ !>Calculates the total volume
+  SUBROUTINE field_GeometricParametersTotalVolume(geometricField, &
+    & err,error,*)
+
+    !Argument variables
+    TYPE(FIELD_TYPE), POINTER :: geometricField !<A pointer to the geometric field to calculate the total volume for
+    INTEGER(INTG), INTENT(OUT) :: err              !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error     !<The error string
+
+    !Local variables
+    TYPE(VARYING_STRING) :: localError
+    TYPE(DECOMPOSITION_TYPE), POINTER :: decomposition
+    TYPE(DECOMPOSITION_TOPOLOGY_TYPE), POINTER :: decompositionTopology
+    REAL(DP) :: totalVolume
+    INTEGER(INTG) :: elemIdx,MPI_IERROR
+
+    ENTERS("field_GeometricParametersTotalVolume",err,error,*999)
+
+
+    IF(.NOT.ASSOCIATED(geometricField)) CALL FlagError("Geometric Field is not associated.",err,error,*999)
+    IF(.NOT.geometricField%FIELD_FINISHED) THEN
+      localError="Field number "//TRIM(NumberToVString(geometricField%USER_NUMBER,"*",err,error))//" has not been finished."
+      CALL FlagError(localError,err,error,*999)
+    ENDIF
+    IF(geometricField%TYPE/=FIELD_GEOMETRIC_TYPE) THEN
+      localError="Field number "//TRIM(NumberToVString(geometricField%USER_NUMBER,"*",err,error))//" is not a geometric field."
+      CALL FlagError(localError,err,error,*999)
+    ENDIF
+    IF(.NOT.ASSOCIATED(geometricField%GEOMETRIC_FIELD_PARAMETERS)) THEN
+      localError="Geometric parameters are not associated for field number "// &
+        & TRIM(NumberToVString(geometricField%USER_NUMBER,"*",err,error))//"."
+      CALL FlagError(localError,err,error,*999)
+    ENDIF
+
+    NULLIFY(decomposition)
+    CALL Field_DecompositionGet(geometricField,decomposition,err,error,*999)
+    NULLIFY(decompositionTopology)
+    CALL Decomposition_TopologyGet(decomposition,decompositionTopology,err,error,*999)
+
+    ! Calculate total volume (for each rank first)
+    totalVolume = 0.0_DP
+    DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
+        totalVolume=totalVolume+geometricField%GEOMETRIC_FIELD_PARAMETERS%VOLUMES(elemIdx)
+    ENDDO
+
+    ! Collect and sum the total volumes
+    IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
+      CALL MPI_ALLREDUCE(MPI_IN_PLACE,totalVolume, &
+      & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
+      CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
+    END IF
+
+    geometricField%GEOMETRIC_FIELD_PARAMETERS%totalVolume=totalVolume
+
+    EXITS("field_GeometricParametersTotalVolume")
+    RETURN
+999 ERRORSEXITS("field_GeometricParametersTotalVolume",err,error)
+    RETURN 1
+  END SUBROUTINE field_GeometricParametersTotalVolume
+
+
+  !
+  !================================================================================================================================
+  !
+
+ !Elias
+ !>Calculates the surface integral of a component of field variable over the entire surface.
+  SUBROUTINE field_VariableSurfaceIntegral(field,variableType,componentNumber,integralValue, &
+    & err,error,*)
+
+    !Argument variables
+    TYPE(FIELD_TYPE), POINTER :: field !<A pointer to the field to get the surface integral for
+    INTEGER(INTG),  INTENT(IN) :: variableType !<The field variable type of the field variable component to set \see FIELD_ROUTINES_VariableTypes,FIELD_ROUTINES
+    INTEGER(INTG), INTENT(IN) :: componentNumber !<The component number of the field variable to calculate the integral
+    REAL(DP), INTENT(OUT) :: integralValue !<The value for volume integral of variable component
+    INTEGER(INTG), INTENT(OUT) :: err              !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error     !<The error string
+
+    !Local variables
+    TYPE(VARYING_STRING) :: localError
+    INTEGER(INTG) :: elemIdx,faceIdx,gaussIdx,nodeIdx,derivIdx,ms,nodeNumber,faceNumber,globalDof,MPI_IERROR
+    TYPE(FIELD_VARIABLE_TYPE), POINTER :: fieldVariable
+    TYPE(DOMAIN_TYPE), POINTER :: domain
+    TYPE(BASIS_TYPE), POINTER:: basis
+    TYPE(FIELD_TYPE), POINTER :: geometricField
+    TYPE(DECOMPOSITION_TYPE), POINTER :: decomposition
+    TYPE(DECOMPOSITION_TOPOLOGY_TYPE), POINTER :: decompositionTopology
+    TYPE(DOMAIN_TOPOLOGY_TYPE), POINTER :: domainTopology
+    TYPE(DOMAIN_FACES_TYPE), POINTER :: domainFaces
+    TYPE(DOMAIN_FACE_TYPE), POINTER :: face
+    TYPE(QUADRATURE_SCHEME_TYPE), POINTER :: quadratureScheme
+    TYPE(FIELD_INTERPOLATION_PARAMETERS_PTR_TYPE), POINTER :: interpolationParameters(:)
+    TYPE(FIELD_INTERPOLATED_POINT_PTR_TYPE), POINTER :: interpolatedPoint(:)
+    TYPE(FIELD_INTERPOLATED_POINT_METRICS_PTR_TYPE), POINTER :: interpolatedPointMetrics(:)
+    REAL(DP) :: phim,value
+    LOGICAL :: dependentGeometry
+
+    ENTERS("field_VariableSurfaceIntegral",err,error,*999)
+
+    IF(.NOT.ASSOCIATED(field)) CALL FlagError("field is not associated.",err,error,*999)
+    IF(.NOT.field%FIELD_FINISHED) THEN
+      localError="Field number "//TRIM(NumberToVString(field%USER_NUMBER,"*",err,error))//" has not been finished."
+      CALL FlagError(localError,err,error,*999)
+    ENDIF
+
+    IF(variableType>=1.AND.variableType<=FIELD_NUMBER_OF_VARIABLE_TYPES) THEN
+      fieldVariable=>FIELD%VARIABLE_TYPE_MAP(variableType)%PTR
+      IF(ASSOCIATED(fieldVariable)) THEN
+        IF(componentNumber>=1.AND.componentNumber<=fieldVariable%NUMBER_OF_COMPONENTS) THEN
+          ! get the geometry
+          NULLIFY(geometricField)
+          CALL Field_GeometricGeneralFieldGet(field,geometricField,dependentGeometry,err,error,*999)
+          IF(.NOT.ASSOCIATED(geometricField)) CALL FlagError("Field is not associated.",err,error,*999)
+          !Initialise interpolated point metrics
+          NULLIFY(interpolationParameters)
+          NULLIFY(interpolatedPoint)
+          NULLIFY(interpolatedPointMetrics)
+          CALL Field_InterpolationParametersInitialise(geometricField,interpolationParameters,err,error,*999)
+          CALL Field_InterpolatedPointsInitialise(interpolationParameters,interpolatedPoint,err,error,*999)
+          CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoint,interpolatedPointMetrics,err,error,*999)
+
+          NULLIFY(decomposition)
+          CALL Field_DecompositionGet(geometricField,decomposition,err,error,*999)
+          NULLIFY(decompositionTopology)
+          CALL Decomposition_TopologyGet(decomposition,decompositionTopology,err,error,*999)
+          NULLIFY(domain)
+          CALL Decomposition_DomainGet(decomposition,0,domain,err,error,*999)
+          NULLIFY(domainTopology)
+          CALL Domain_TopologyGet(domain,domainTopology,err,error,*999)
+          NULLIFY(domainFaces)
+          CALL DomainTopology_FacesGet(domainTopology,domainFaces,err,error,*999)
+          ! NULLIFY(domainElements)
+          ! CALL DomainTopology_ElementsGet(domainTopology,domainElements,err,error,*999)
+          SELECT CASE(fieldVariable%COMPONENTS(componentNumber)%INTERPOLATION_TYPE)
+          CASE(FIELD_CONSTANT_INTERPOLATION)
+            localError="Not implemented for the constant interpolation "
+            CALL FLAG_error(localError,err,error,*999)
+          CASE(FIELD_NODE_BASED_INTERPOLATION)
+
+            integralValue=0.0_DP
+            !Loop over the boundary faces
+            DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
+              DO faceIdx=1,SIZE(decompositionTopology%ELEMENTS%ELEMENTS(elemIdx)%ELEMENT_FACES)
+                faceNumber=decompositiontopology%elements%elements(elemIdx)%element_faces(faceIdx)
+                face=>domainFaces%faces(faceNumber)
+                IF (face%boundary_face) THEN
+                  basis=>face%basis
+                  IF(.NOT.ASSOCIATED(basis)) THEN
+                    CALL FlagError("basis is not associated.",err,error,*999)
+                  END IF
+                  quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+                  IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+                    CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
+                  END IF
+
+                  CALL Field_InterpolationParametersFaceGet(FIELD_VALUES_SET_TYPE,faceNumber, &
+                    & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+
+                  DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+                    CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                      & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                    CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_AREA_TYPE, &
+                      & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
+
+                    DO nodeIdx=1,basis%NUMBER_OF_NODES
+                      nodeNumber=face%NODES_IN_FACE(nodeIdx)
+                      DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+
+                        globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
+                        CALL Field_ParameterSetGetNode(field,variableType,FIELD_VALUES_SET_TYPE,1,derivIdx, &
+                          & globalDof,1,value,err,error,*999)
+
+                        ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                        phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                        integralValue=integralValue+value*Phim* &
+                          & InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
+                      END DO !derivIdx
+                    END DO !nodeIdx
+                  ENDDO !gaussIdx
+                END IF
+              ENDDO !faceIdx
+            END DO !elemIdx
+
+            IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
+              CALL MPI_ALLREDUCE(MPI_IN_PLACE,integralValue, &
+              & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
+              CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
+            END IF
+
+          CASE(FIELD_ELEMENT_BASED_INTERPOLATION)
+            localError="Not implemented for the element based interpolation "
+            CALL FLAG_error(localError,err,error,*999)
+          CASE(FIELD_GRID_POINT_BASED_INTERPOLATION)
+            localError="Not implemented for the grid point based interpolation "
+            CALL FLAG_error(localError,err,error,*999)
+          CASE(FIELD_GAUSS_POINT_BASED_INTERPOLATION)
+            localError="Not implemented for the Gauss point based interpolation "
+            CALL FLAG_error(localError,err,error,*999)
+          CASE(FIELD_DATA_POINT_BASED_INTERPOLATION)
+            localError="Not implemented for the data point based interpolation "
+            CALL FLAG_error(localError,err,error,*999)
+          CASE DEFAULT
+            localError="The field component interpolation type of "//TRIM(NumberToVString(fieldVariable% &
+              & COMPONENTS(componentNumber)%INTERPOLATION_TYPE,"*",err,error))// &
+              & " is invalid for component number "//TRIM(NumberToVString(componentNumber,"*",err,error))// &
+              & " of variable type "//TRIM(NumberToVString(variableType,"*",err,error))// &
+              & " of field number "//TRIM(NumberToVString(FIELD%USER_NUMBER,"*",err,error))//"."
+            CALL FlagError(localError,err,error,*999)
+          END SELECT
+
+        ELSE
+          localError="Component number "//TRIM(NumberToVString(componentNumber,"*",err,error))// &
+            & " is invalid for variable type "//TRIM(NumberToVString(variableType,"*",err,error))// &
+            & " of field number "//TRIM(NumberToVString(FIELD%USER_NUMBER,"*",err,error))//" which has "// &
+            & TRIM(NumberToVString(fieldVariable%NUMBER_OF_COMPONENTS,"*",err,error))// &
+            & " components."
+          CALL FlagError(localError,err,error,*999)
+        ENDIF
+      ELSE
+        localError="The specified field variable type of "//TRIM(NumberToVString(variableType,"*",err,error))// &
+          & " has not been defined on field number "//TRIM(NumberToVString(FIELD%USER_NUMBER,"*",err,error))//"."
+        CALL FlagError(localError,err,error,*999)
+      ENDIF
+    ELSE
+      localError="The specified variable type of "//TRIM(NumberToVString(variableType,"*",err,error))// &
+        & " is invalid. The variable type must be between 1 and  "// &
+        & TRIM(NumberToVString(FIELD_NUMBER_OF_VARIABLE_TYPES,"*",err,error))//"."
+      CALL FlagError(localError,err,error,*999)
+    ENDIF
+
+    EXITS("field_VariableSurfaceIntegral")
+    RETURN
+999 ERRORSEXITS("field_VariableSurfaceIntegral",err,error)
+    RETURN 1
+  END SUBROUTINE field_VariableSurfaceIntegral
+
 
   !
   !================================================================================================================================

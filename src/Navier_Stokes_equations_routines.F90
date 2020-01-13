@@ -14635,7 +14635,7 @@ CONTAINS
     REAL(DP) :: Q3D,A3D,p3D
     REAL(DP), POINTER :: Impedance(:),Flow(:)
     INTEGER(INTG) :: nodeIdx,versionIdx,derivativeIdx,componentIdx,numberOfVersions,numberOfLocalNodes
-    INTEGER(INTG) :: dependentDof,boundaryConditionType,k
+    INTEGER(INTG) :: dependentDof,boundaryConditionType,k,variableLocalDof
 
     ENTERS("NavierStokes_UpdateMultiscaleBoundary",err,error,*999)
 
@@ -14742,8 +14742,10 @@ CONTAINS
             CALL Field_VariableGet(dependentField,FIELD_U_VARIABLE_TYPE,fieldVariable,err,error,*999)
             ! Get the boundary condition type for the dependent field primitive variables (Q,A)
             DO componentIdx=1,2
-              dependentDof = fieldVariable%COMPONENTS(componentIdx)%PARAM_TO_DOF_MAP% &
+              !Get the varialbe global dof from variable local dof
+              variableLocalDof = fieldVariable%COMPONENTS(componentIdx)%PARAM_TO_DOF_MAP% &
                & NODE_PARAM2DOF_MAP%NODES(nodeIdx)%DERIVATIVES(derivativeIdx)%VERSIONS(versionIdx)
+              dependentDof=fieldVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(variableLocalDof)
               CALL BOUNDARY_CONDITIONS_VARIABLE_GET(boundaryConditions,fieldVariable,boundaryConditionsVariable,err,error,*999)
               boundaryConditionType=boundaryConditionsVariable%CONDITION_TYPES(dependentDof)
               SELECT CASE(boundaryConditionType)

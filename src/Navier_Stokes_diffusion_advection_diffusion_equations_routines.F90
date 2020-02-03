@@ -105,7 +105,8 @@ MODULE NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_ROUTINES
   PUBLIC NavierStokesDiffAdvDiff_PreSolve
   PUBLIC NavierStokesDiffAdvDiff_PostSolve
 
-
+  PUBLIC NavierStokesDiffAdvDiff_ControlLoopPreLoop
+  PUBLIC NavierStokesDiffAdvDiff_ControlLoopPostLoop
 
 CONTAINS
 
@@ -737,6 +738,7 @@ CONTAINS
             !Flow solvers
             NULLIFY(whileLoopConditional)
             NULLIFY(iterativeWhileLoop)
+            NULLIFY(timeLoopFlow)
             CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,2,whileLoopConditional,err,error,*999)
             CALL CONTROL_LOOP_SUB_LOOP_GET(whileLoopConditional,1,timeLoopFlow,err,error,*999)
             CALL CONTROL_LOOP_SUB_LOOP_GET(timeLoopFlow,1,iterativeWhileLoop,err,error,*999)
@@ -762,7 +764,7 @@ CONTAINS
             NULLIFY(simpleLoop2)
             NULLIFY(solvers)
             CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
-            CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,solvers,err,error,*999)
+            CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop2,solvers,err,error,*999)
             !It has two solvers, one for solvine energy equation for vessels and the other one two solve bioheat equation in tissues
 !!!-- E N E R G Y  E Q U A T I O N  V E S S E L S --!!!
             !Get the advection-diffusion solver and create the advection-diffusion solver equations
@@ -790,6 +792,7 @@ CONTAINS
             !Flow solvers
             NULLIFY(whileLoopConditional)
             NULLIFY(iterativeWhileLoop)
+            NULLIFY(timeLoopFlow)
             CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,2,whileLoopConditional,err,error,*999)
             CALL CONTROL_LOOP_SUB_LOOP_GET(whileLoopConditional,1,timeLoopFlow,err,error,*999)
             CALL CONTROL_LOOP_SUB_LOOP_GET(timeLoopFlow,1,iterativeWhileLoop,err,error,*999)
@@ -811,7 +814,7 @@ CONTAINS
             NULLIFY(simpleLoop2)
             NULLIFY(solvers)
             CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
-            CALL CONTROL_LOOP_SOLVERS_GET(CONTROL_LOOP,solvers,err,error,*999)
+            CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop2,solvers,err,error,*999)
             !It has two solvers, one for solvine energy equation for vessels and the other one two solve bioheat equation in tissues
   !!!-- E N E R G Y  E Q U A T I O N  V E S S E L S --!!!
             !Get the advection-diffusion solver and create the advection-diffusion solver equations
@@ -1182,7 +1185,7 @@ CONTAINS
               CALL Advection_PreSolve(solver,err,error,*999)
             END IF
             ! Update boundary conditions
-            CALL NavierStokes_PreSolveUpdateBoundaryConditions(SOLVER,err,error,*999)
+            CALL NavierStokesDiffAdvDiff_PreSolveBoundaryConditions(SOLVER,err,error,*999)
           CASE DEFAULT
             localError="The solve type of "//TRIM(NumberToVString(SOLVER%SOLVE_TYPE,"*",err,error))// &
               & " is invalid for a 1D Navier-Stokes problem."
@@ -1222,21 +1225,9 @@ CONTAINS
     INTEGER(INTG) :: faceIdx,gaussIdx,MPI_IERROR,elemIdx,faceNumber,ms,globalDof,nodeIdx,derivIdx,nodeNumber,counter,myComputationalNodeNumber
     !
     REAL(DP) :: area,Tn,phim,muscleVolume,organType,sourceValue ! Because I do not want to define twe independentField variables (problem with CellML) I define organType as Real instead of integer
-    TYPE(BASIS_TYPE), POINTER:: basis
     TYPE(COORDINATE_SYSTEM_TYPE), POINTER :: coordinateSystem
-    TYPE(DOMAIN_TYPE), POINTER :: domain
-    TYPE(DOMAIN_FACES_TYPE), POINTER :: domainFaces
-    TYPE(DOMAIN_ELEMENTS_TYPE), POINTER :: domainElements
-    TYPE(DOMAIN_TOPOLOGY_TYPE), POINTER :: domainTopology
     TYPE(DECOMPOSITION_TYPE), POINTER :: decomposition
-    TYPE(DECOMPOSITION_FACES_TYPE), POINTER :: decompositionFaces
     TYPE(DECOMPOSITION_TOPOLOGY_TYPE), POINTER :: decompositionTopology
-    TYPE(DECOMPOSITION_ELEMENTS_TYPE), POINTER :: decompositionElements
-    TYPE(FIELD_INTERPOLATION_PARAMETERS_PTR_TYPE), POINTER :: interpolationParameters(:)
-    TYPE(FIELD_INTERPOLATED_POINT_PTR_TYPE), POINTER :: interpolatedPoint(:)
-    TYPE(FIELD_INTERPOLATED_POINT_METRICS_PTR_TYPE), POINTER :: interpolatedPointMetrics(:)
-    TYPE(DOMAIN_FACE_TYPE), POINTER :: face
-    TYPE(QUADRATURE_SCHEME_TYPE), POINTER :: quadratureScheme
     REAL(DP) :: T_skin,T_core,T_shiv,Qshiv_max,Qshiv
     TYPE(SOLVER_TYPE), POINTER :: solverDiffusion  !<A pointer to the solvers !Elias
     TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: solverEquationsDiffusion
@@ -1247,6 +1238,7 @@ CONTAINS
     TYPE(VARYING_STRING) :: dummyError,localError
     TYPE(CONTROL_LOOP_TYPE), POINTER :: CONTROL_LOOP_ROOT,CONTROL_LOOP,simpleLoop2
     TYPE(SOLVERS_TYPE), POINTER :: solvers
+    REAL(DP) :: currentTime,timeIncrement
 
     !
     ENTERS("NavierStokesDiffAdvDiff_UpdateControlParameters",ERR,ERROR,*999)
@@ -1263,7 +1255,7 @@ CONTAINS
     CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
     NULLIFY(solvers)
     CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop2,solvers,err,error,*999)
-    NULLIFY(solver)
+    ! NULLIFY(solver)
     NULLIFY(solverDiffusion)
     CALL SOLVERS_SOLVER_GET(solvers,2,solverDiffusion,err,error,*999)
 
@@ -1285,6 +1277,7 @@ CONTAINS
     !Get the independent field where T_skin and other parameters are stored
     CALL EquationsSet_IndependentFieldGet(equationsSetDiffusion,independentField,err,error,*999)
     ! get the geometry
+    NULLIFY(geometricField)
     CALL Field_GeometricGeneralFieldGet(dependentField,geometricField,dependentGeometry,err,error,*999)
 
 
@@ -1305,105 +1298,25 @@ CONTAINS
 
     ! Calculate skin temperature by averaging Tt over boundary which is skin.
     NULLIFY(coordinateSystem)
-    NULLIFY(interpolationParameters)
-    NULLIFY(interpolatedPoint)
-    NULLIFY(interpolatedPointMetrics)
     CALL Field_CoordinateSystemGet(geometricField,coordinateSystem,err,error,*999)
     IF(coordinateSystem%NUMBER_OF_DIMENSIONS==3) THEN !only calculate Skin temperature if the body is in 3D
-      CALL Field_InterpolationParametersInitialise(geometricField,interpolationParameters,err,error,*999)
-      CALL Field_InterpolatedPointsInitialise(interpolationParameters,interpolatedPoint,err,error,*999)
-      CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoint,interpolatedPointMetrics,err,error,*999)
       !Get basis type for the first component of the mesh defined with this geometric field
       NULLIFY(decomposition)
       CALL Field_DecompositionGet(geometricField,decomposition,err,error,*999)
       NULLIFY(decompositionTopology)
       CALL Decomposition_TopologyGet(decomposition,decompositionTopology,err,error,*999)
-      NULLIFY(decompositionElements)
-      CALL DecompositionTopology_ElementsGet(decompositionTopology,decompositionElements,err,error,*999)
-      NULLIFY(decompositionFaces)
-      CALL DecompositionTopology_FacesGet(decompositionTopology,decompositionFaces,err,error,*999)
-      NULLIFY(domain)
-      CALL Decomposition_DomainGet(decomposition,0,domain,err,error,*999)
-      NULLIFY(domainTopology)
-      CALL Domain_TopologyGet(domain,domainTopology,err,error,*999)
-      NULLIFY(domainFaces)
-      CALL DomainTopology_FacesGet(domainTopology,domainFaces,err,error,*999)
-      NULLIFY(domainElements)
-      CALL DomainTopology_ElementsGet(domainTopology,domainElements,err,error,*999)
-
-      NULLIFY(basis)
 
       !==================== Calculate average skin temperature ===================
-      T_skin=0.0_DP
-      counter = 0 ! to see how many faces are boundary faces
-      !Loop over the boundary faces
-      DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
-        DO faceIdx=1,SIZE(decompositionTopology%ELEMENTS%ELEMENTS(elemIdx)%ELEMENT_FACES)
-          faceNumber=decompositiontopology%elements%elements(elemIdx)%element_faces(faceIdx)
-          face=>domainFaces%faces(faceNumber)
-          IF (face%boundary_face) THEN
-            counter = counter + 1
-            basis=>face%basis
-            IF(.NOT.ASSOCIATED(basis)) THEN
-              CALL FlagError("basis is not associated.",err,error,*999)
-            END IF
-            quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-            IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-              CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
-            END IF
-
-            CALL Field_InterpolationParametersFaceGet(FIELD_VALUES_SET_TYPE,faceNumber, &
-              & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-            DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-              ! CALL Field_InterpolateXi(FIRST_PART_DERIV,gaussPoints(1:3,gaussPointIdx),interpolatedPoint(FIELD_U_VARIABLE_TYPE)%PTR, &
-              CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-                & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-              !   & err,error,*999)
-              CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_AREA_TYPE, &
-                & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-              DO nodeIdx=1,basis%NUMBER_OF_NODES
-                nodeNumber=face%NODES_IN_FACE(nodeIdx)
-                DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-
-                  globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
-                  CALL Field_ParameterSetGetNode(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,1, &
-                    & globalDof,1,Tn,err,error,*999)
-                  ! Tn=dependent_field%variables(1)%parameter_sets%set_type(1)%ptr%parameters%cmiss%datadp(1)
-
-                  ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-                  phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-                  T_skin=T_skin+Tn*Phim* &
-                    & InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
-                END DO !derivIdx
-              END DO !nodeIdx
-              ! area=area+InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
-            ENDDO !gaussIdx
-          END IF
-        ENDDO !faceIdx
-      END DO !elemIdx
-
       area=geometricField%GEOMETRIC_FIELD_PARAMETERS%surfaceArea
-      ! print*, 'area = ',area
+
+      CALL field_VariableSurfaceIntegral(dependentField,FIELD_U_VARIABLE_TYPE,1,T_skin,err,error,*999)
       T_skin = T_skin/area
-      ! print*, 'Tsk = ', T_skin, counter
-
-
-      IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
-        CALL MPI_ALLREDUCE(MPI_IN_PLACE,T_skin, &
-        & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
-        CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
-      END IF
       ! CALL Field_ParameterSetUpdateElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,T_skin,ERR,ERROR,*999)
       CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,T_skin,err,error,*999)
-      ! print*, 'afterMPI',T_skin
-     ! ================================================================================
-
-      ! print*, field%GEOMETRIC_FIELD_PARAMETERS%surfaceArea
-
       ! ===============================================================================
       ! Calculate total muscle volume (for each partition first)
+      ! CALL CONTROL_LOOP_CURRENT_TIMES_GET(controlLoop,currentTime,timeIncrement,err,error,*999)
+      ! IF (currentTime<timeIncrement) THEN ! Just calculate this for the first time step
       muscleVolume = 0.0_DP
       DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
         !CALL Field_ParameterSetGetElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,elemIdx,3, &
@@ -1415,6 +1328,7 @@ CONTAINS
         ENDIF
       ENDDO
 
+
       ! Collect and sum the total muscle volumes of each partition to obtain total muscle volume. vol=SUM(vol_partition)
       IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
         CALL MPI_ALLREDUCE(MPI_IN_PLACE,muscleVolume, &
@@ -1425,77 +1339,29 @@ CONTAINS
       ! Update the muscle total volume in independent field.
       CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
         & 4,muscleVolume,err,error,*999)
-      ! ===============================================================================
-      CALL Field_ParameterSetUpdateStart(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
-      CALL Field_ParameterSetUpdateFinish(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
-
 
       ! ===================== obtain T_core =======================
       ! TODO Should it be rectal temperature only??
-      T_core=0.0_DP
-      DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
-        basis=>domainElements%elements(elemIdx)%basis
-        IF(.NOT.ASSOCIATED(basis)) THEN
-          CALL FlagError("basis is not associated.",err,error,*999)
-        END IF
-        quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-        IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-          CALL FlagError("Element basis default quadrature scheme is not associated.",err,error,*999)
-        END IF
 
-        CALL Field_InterpolationParametersElementGet(FIELD_VALUES_SET_TYPE,elemIdx, &
-          & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-        DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-          CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-            & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-
-          CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_VOLUME_TYPE, &
-            & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-          DO nodeIdx=1,basis%NUMBER_OF_NODES
-            nodeNumber=domainElements%elements(elemIdx)%element_nodes(nodeIdx)
-            DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-
-              globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
-              CALL Field_ParameterSetGetNode(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,1, &
-                & globalDof,1,Tn,err,error,*999)
-
-              ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-              phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-              T_core=T_core+Tn*phim* &
-                & InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
-            END DO !derivIdx
-          END DO !nodeIdx
-        ENDDO !gaussIdx
-      ENDDO !elementIdx
-
+      CALL Field_VariableVolumeIntegral(dependentField,FIELD_U_VARIABLE_TYPE,1,T_core,err,error,*999)
       T_core=T_core/muscleVolume
-
-      IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
-        CALL MPI_ALLREDUCE(MPI_IN_PLACE,T_core, &
-        & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
-        CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
-      END IF
 
       CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,2,T_core,err,error,*999)
 
+      CALL Field_ParameterSetUpdateStart(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
+      CALL Field_ParameterSetUpdateFinish(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
+
       ! TODO: You need to print some values on terminal to check them. Also, you need to exprot them into a file.
       myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
-      ! CALL Field_ParameterSetGetElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,3, &
-      !   & c_param,err,error,*999)
 
       IF(myComputationalNodeNumber==0)THEN
         CALL Field_ParameterSetGetLocalElement(sourceField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
          & 1,1,sourceValue,err,error,*999)
-        print*, "Tskin,Tcore=",T_skin,T_core
+        print*, "Tskin,Tcore,muscleVolume,area=",T_skin,T_core, muscleVolume,area
         open(1,file='data',status='old')
-        write(1,*) T_skin,T_core,sourceValue
+        write(1,*) T_skin,T_core,muscleVolume,sourceValue
       ENDIF
-      !Finalise
-      CALL Field_InterpolatedPointsMetricsFinalise(interpolatedPointMetrics,err,error,*999)
-      CALL Field_InterpolatedPointsFinalise(interpolatedPoint,err,error,*999)
-      CALL Field_InterpolationParametersFinalise(interpolationParameters,err,error,*999)
+
       ! DO elementIdx=1,decompositionElements%NUMBER_OF_ELEMENTS
       !   CALL Field_InterpolationParametersElementGet(FIELD_VALUES_SET_TYPE,elementIdx, &
       !     & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
@@ -1526,8 +1392,6 @@ CONTAINS
       !========================= q_breathing for lung =======================
       ! q_bre=1.0_DP/V_lung*(0.0014_DP*Qm_glob*(34.0_0-T_out)+0.0173_DP*Qm_glob*(5.87_DP-P_out)) ! W/cm3 !TODO change the units divide by rhoc and find T_out and ....
 
-
-
     ENDIF
 
     EXITS("NavierStokesDiffAdvDiff_UpdateControlParameters")
@@ -1552,21 +1416,10 @@ CONTAINS
     INTEGER(INTG) :: faceIdx,gaussIdx,MPI_IERROR,elemIdx,faceNumber,ms,globalDof,nodeIdx,derivIdx,nodeNumber,counter,myComputationalNodeNumber
     !
     REAL(DP) :: area,Tn,phim,muscleVolume,organType,sourceValue ! Because I do not want to define twe independentField variables (problem with CellML) I define organType as Real instead of integer
-    TYPE(BASIS_TYPE), POINTER:: basis
+    ! TYPE(BASIS_TYPE), POINTER:: basis
     TYPE(COORDINATE_SYSTEM_TYPE), POINTER :: coordinateSystem
-    TYPE(DOMAIN_TYPE), POINTER :: domain
-    TYPE(DOMAIN_FACES_TYPE), POINTER :: domainFaces
-    TYPE(DOMAIN_ELEMENTS_TYPE), POINTER :: domainElements
-    TYPE(DOMAIN_TOPOLOGY_TYPE), POINTER :: domainTopology
     TYPE(DECOMPOSITION_TYPE), POINTER :: decomposition
-    TYPE(DECOMPOSITION_FACES_TYPE), POINTER :: decompositionFaces
     TYPE(DECOMPOSITION_TOPOLOGY_TYPE), POINTER :: decompositionTopology
-    TYPE(DECOMPOSITION_ELEMENTS_TYPE), POINTER :: decompositionElements
-    TYPE(FIELD_INTERPOLATION_PARAMETERS_PTR_TYPE), POINTER :: interpolationParameters(:)
-    TYPE(FIELD_INTERPOLATED_POINT_PTR_TYPE), POINTER :: interpolatedPoint(:)
-    TYPE(FIELD_INTERPOLATED_POINT_METRICS_PTR_TYPE), POINTER :: interpolatedPointMetrics(:)
-    TYPE(DOMAIN_FACE_TYPE), POINTER :: face
-    TYPE(QUADRATURE_SCHEME_TYPE), POINTER :: quadratureScheme
     REAL(DP) :: T_skin,T_core,T_shiv,Qshiv_max,Qshiv
     TYPE(SOLVER_TYPE), POINTER :: solverDiffusion  !<A pointer to the solvers !Elias
     TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: solverEquationsDiffusion
@@ -1578,11 +1431,9 @@ CONTAINS
     !
     ENTERS("NavierStokesDiffAdvDiff_UpdateParameters",ERR,ERROR,*999)
 
-
-
     IF(SOLVER%GLOBAL_NUMBER==1) THEN
     !
-    !   !Update skin temperature !Elias */
+      !Update skin temperature
       NULLIFY(solverDiffusion)
       NULLIFY(solverEquationsDiffusion)
 
@@ -1604,7 +1455,7 @@ CONTAINS
       CALL EquationsSet_SourceFieldGet(equationsSetDiffusion,sourceField,err,error,*999)
       !Get the independent field where T_skin and other parameters are stored
       CALL EquationsSet_IndependentFieldGet(equationsSetDiffusion,independentField,err,error,*999)
-      ! geometricField=>dependentField%geometric_field
+      NULLIFY(geometricField)
       CALL Field_GeometricGeneralFieldGet(dependentField,geometricField,dependentGeometry,err,error,*999)
 
 
@@ -1624,113 +1475,22 @@ CONTAINS
       ENDIF
 
       NULLIFY(coordinateSystem)
-      NULLIFY(interpolationParameters)
-      NULLIFY(interpolatedPoint)
-      NULLIFY(interpolatedPointMetrics)
       CALL Field_CoordinateSystemGet(geometricField,coordinateSystem,err,error,*999)
       IF(coordinateSystem%NUMBER_OF_DIMENSIONS==3) THEN !only calculate Skin temperature if the body is in 3D
-        CALL Field_InterpolationParametersInitialise(geometricField,interpolationParameters,err,error,*999)
-        CALL Field_InterpolatedPointsInitialise(interpolationParameters,interpolatedPoint,err,error,*999)
-        CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoint,interpolatedPointMetrics,err,error,*999)
         !Get basis type for the first component of the mesh defined with this geometric field
         NULLIFY(decomposition)
         CALL Field_DecompositionGet(geometricField,decomposition,err,error,*999)
         NULLIFY(decompositionTopology)
         CALL Decomposition_TopologyGet(decomposition,decompositionTopology,err,error,*999)
-        NULLIFY(decompositionElements)
-        CALL DecompositionTopology_ElementsGet(decompositionTopology,decompositionElements,err,error,*999)
-        NULLIFY(decompositionFaces)
-        CALL DecompositionTopology_FacesGet(decompositionTopology,decompositionFaces,err,error,*999)
-        NULLIFY(domain)
-        CALL Decomposition_DomainGet(decomposition,0,domain,err,error,*999)
-        NULLIFY(domainTopology)
-        CALL Domain_TopologyGet(domain,domainTopology,err,error,*999)
-        NULLIFY(domainFaces)
-        CALL DomainTopology_FacesGet(domainTopology,domainFaces,err,error,*999)
-        NULLIFY(domainElements)
-        CALL DomainTopology_ElementsGet(domainTopology,domainElements,err,error,*999)
 
-        NULLIFY(basis)
-        !Allocate Gauss points
-        ! order=2
-        ! maxNumberOfGauss=order*order*order
-        ! ALLOCATE(gaussPoints(3,maxNumberOfGauss),STAT=err)
-        ! IF(err/=0) CALL FlagError("Could not allocated gauss points.",err,error,*999)
-        ! ALLOCATE(gaussWeights(maxNumberOfGauss),STAT=err)
-        ! IF(err/=0) CALL FlagError("Could not allocated gauss weights.",err,error,*999)
-        !Calculate Gauss points
-        ! CALL Basis_GaussPointsCalculate(basis,order,3,numberOfGaussPoints,gaussPoints,gaussWeights,err,error,*999)
-        ! decompositiontopology%elements%number_of_elements
-         !decompositiontopology%elements%elements(1)%element_faces
 
         !==================== Calculate average skin temperature ===================
-        T_skin=0.0_DP
-        counter = 0 ! to see how many faces are boundary faces
-        !Loop over the boundary faces
-        DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
-          DO faceIdx=1,SIZE(decompositionTopology%ELEMENTS%ELEMENTS(elemIdx)%ELEMENT_FACES)
-            faceNumber=decompositiontopology%elements%elements(elemIdx)%element_faces(faceIdx)
-            face=>domainFaces%faces(faceNumber)
-            IF (face%boundary_face) THEN
-              counter = counter + 1
-              basis=>face%basis
-              IF(.NOT.ASSOCIATED(basis)) THEN
-                CALL FlagError("basis is not associated.",err,error,*999)
-              END IF
-              quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-              IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-                CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
-              END IF
+        area=geometricField%GEOMETRIC_FIELD_PARAMETERS%surfaceArea        !Allocate Gauss points
 
-              CALL Field_InterpolationParametersFaceGet(FIELD_VALUES_SET_TYPE,faceNumber, &
-                & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-              DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-                ! CALL Field_InterpolateXi(FIRST_PART_DERIV,gaussPoints(1:3,gaussPointIdx),interpolatedPoint(FIELD_U_VARIABLE_TYPE)%PTR, &
-                CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-                  & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                !   & err,error,*999)
-                CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_AREA_TYPE, &
-                  & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-                DO nodeIdx=1,basis%NUMBER_OF_NODES
-                  nodeNumber=face%NODES_IN_FACE(nodeIdx)
-                  DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-
-                    globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
-                    CALL Field_ParameterSetGetNode(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,1, &
-                      & globalDof,1,Tn,err,error,*999)
-                    ! Tn=dependent_field%variables(1)%parameter_sets%set_type(1)%ptr%parameters%cmiss%datadp(1)
-
-                    ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-                    phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-                    T_skin=T_skin+Tn*Phim* &
-                      & InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
-                  END DO !derivIdx
-                END DO !nodeIdx
-                ! area=area+InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
-              ENDDO !gaussIdx
-            END IF
-          ENDDO !faceIdx
-        END DO !elemIdx
-
-        area=geometricField%GEOMETRIC_FIELD_PARAMETERS%surfaceArea
-        ! print*, 'area = ',area
+        CALL field_VariableSurfaceIntegral(dependentField,FIELD_U_VARIABLE_TYPE,1,T_skin,err,error,*999)
         T_skin = T_skin/area
-        ! print*, 'Tsk = ', T_skin, counter
-
-
-        IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
-          CALL MPI_ALLREDUCE(MPI_IN_PLACE,T_skin, &
-          & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
-          CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
-        END IF
         ! CALL Field_ParameterSetUpdateElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,T_skin,ERR,ERROR,*999)
         CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,T_skin,err,error,*999)
-        ! print*, 'afterMPI',T_skin
-       ! ================================================================================
-
-        ! print*, field%GEOMETRIC_FIELD_PARAMETERS%surfaceArea
 
         ! ===============================================================================
         ! Calculate total muscle volume (for each partition first)
@@ -1755,66 +1515,19 @@ CONTAINS
         ! Update the muscle total volume in independent field.
         CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
           & 4,muscleVolume,err,error,*999)
-        ! ===============================================================================
-        CALL Field_ParameterSetUpdateStart(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
-        CALL Field_ParameterSetUpdateFinish(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
-
 
         ! ===================== obtain T_core =======================
         ! TODO Should it be rectal temperature only??
-        T_core=0.0_DP
-        DO elemIdx=1,decompositionTopology%ELEMENTS%NUMBER_OF_ELEMENTS
-          basis=>domainElements%elements(elemIdx)%basis
-          IF(.NOT.ASSOCIATED(basis)) THEN
-            CALL FlagError("basis is not associated.",err,error,*999)
-          END IF
-          quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-          IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-            CALL FlagError("Element basis default quadrature scheme is not associated.",err,error,*999)
-          END IF
 
-          CALL Field_InterpolationParametersElementGet(FIELD_VALUES_SET_TYPE,elemIdx, &
-            & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-          DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-            CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-              & interpolatedPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-
-            CALL Field_InterpolatedPointMetricsCalculate(COORDINATE_JACOBIAN_VOLUME_TYPE, &
-              & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
-
-            DO nodeIdx=1,basis%NUMBER_OF_NODES
-              nodeNumber=domainElements%elements(elemIdx)%element_nodes(nodeIdx)
-              DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-
-                globalDof=domain%mappings%nodes%local_to_global_map(nodeNumber)
-                CALL Field_ParameterSetGetNode(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,1, &
-                  & globalDof,1,Tn,err,error,*999)
-
-                ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-                phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-                T_core=T_core+Tn*phim* &
-                  & InterpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian*quadratureScheme%GAUSS_WEIGHTS(gaussIdx)
-              END DO !derivIdx
-            END DO !nodeIdx
-          ENDDO !gaussIdx
-        ENDDO !elementIdx
-
+        CALL Field_VariableVolumeIntegral(dependentField,FIELD_U_VARIABLE_TYPE,1,T_core,err,error,*999)
         T_core=T_core/muscleVolume
-
-        IF(computationalEnvironment%numberOfComputationalNodes>1) THEN
-          CALL MPI_ALLREDUCE(MPI_IN_PLACE,T_core, &
-          & 1,MPI_REAL8,MPI_SUM,computationalEnvironment%mpiCommunicator,MPI_IERROR)
-          CALL MPI_ERROR_CHECK("MPI_ALLREDUCE",MPI_IERROR,ERR,ERROR,*999)
-        END IF
 
         CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,2,T_core,err,error,*999)
 
-        ! TODO: You need to print some values on terminal to check them. Also, you need to exprot them into a file.
-        myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
-        ! CALL Field_ParameterSetGetElement(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,3, &
-        !   & c_param,err,error,*999)
+        CALL Field_ParameterSetUpdateStart(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
+        CALL Field_ParameterSetUpdateFinish(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
 
+        myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
         IF(myComputationalNodeNumber==0)THEN
           CALL Field_ParameterSetGetLocalElement(sourceField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
            & 1,1,sourceValue,err,error,*999)
@@ -1822,10 +1535,7 @@ CONTAINS
           open(1,file='data',status='old')
           write(1,*) T_skin,T_core,sourceValue
         ENDIF
-        !Finalise
-        CALL Field_InterpolatedPointsMetricsFinalise(interpolatedPointMetrics,err,error,*999)
-        CALL Field_InterpolatedPointsFinalise(interpolatedPoint,err,error,*999)
-        CALL Field_InterpolationParametersFinalise(interpolationParameters,err,error,*999)
+
         ! DO elementIdx=1,decompositionElements%NUMBER_OF_ELEMENTS
         !   CALL Field_InterpolationParametersElementGet(FIELD_VALUES_SET_TYPE,elementIdx, &
         !     & interpolationParameters(FIELD_U_VARIABLE_TYPE)%PTR,err,error,*999)
@@ -2252,6 +1962,7 @@ CONTAINS
 
     ENTERS("NavierStokesDiffAdvDiff_PostSolve",ERR,ERROR,*999)
 
+
     IF(ASSOCIATED(controlLoop)) THEN
       IF(ASSOCIATED(SOLVER)) THEN
         IF(ASSOCIATED(controlLoop%PROBLEM)) THEN
@@ -2267,6 +1978,8 @@ CONTAINS
             SELECT CASE(SOLVER%SOLVE_TYPE)
             CASE(SOLVER_NONLINEAR_TYPE)
               ! Characteristic solver- copy branch Q,A values to new parameter set
+              NULLIFY(dependentField)
+              NULLIFY(fieldVariable)
               dependentField=>SOLVER%SOLVER_equations%SOLVER_MAPPING%EQUATIONS_SETS(1)%ptr%DEPENDENT%DEPENDENT_FIELD
               CALL Field_VariableGet(dependentField,FIELD_U_VARIABLE_TYPE,fieldVariable,err,error,*999)
               IF(.NOT.ASSOCIATED(fieldVariable%PARAMETER_SETS%SET_TYPE(FIELD_UPWIND_VALUES_SET_TYPE)%ptr)) THEN
@@ -2290,6 +2003,8 @@ CONTAINS
                   & " is invalid for a coupled Navier-Stokes & diffusion & advection-diffusion proplem type."
                 CALL FlagError(localError,err,error,*999)
               END SELECT
+            CASE(SOLVER_CELLML_EVALUATOR_TYPE)
+! --- C e l l M L  E v a l u a t o r --- !
             CASE DEFAULT
               localError="The solver type of "//TRIM(NumberToVString(SOLVER%SOLVE_TYPE,"*",err,error))// &
                 & " is invalid for a 1D Navier-Stokes problem."
@@ -2733,6 +2448,79 @@ CONTAINS
   !================================================================================================================================
   !
 
+  !>Runs before each control loop iteration
+  SUBROUTINE NavierStokesDiffAdvDiff_ControlLoopPreLoop(controlLoop,err,error,*)
+
+    !Argument variables
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: controlLoop !<A pointer to the control loop.
+    INTEGER(INTG), INTENT(OUT) :: err !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
+    !Local Variables
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: subloop,subloop2,subloop3,iterativeWhileLoop2,iterativeWhileLoop3,whileLoopConditional
+    TYPE(SOLVER_TYPE), POINTER :: navierStokesSolver,navierStokesSolver3D,navierStokesSolver1D,solver
+    TYPE(SOLVER_MAPPING_TYPE), POINTER :: solverMapping,solverMapping2
+    TYPE(EQUATIONS_SET_TYPE), POINTER :: equationsSet,equationsSet2,coupledEquationsSet
+    TYPE(FIELD_TYPE), POINTER :: dependentField
+    TYPE(FIELD_VARIABLE_TYPE), POINTER :: fieldVariable
+    TYPE(VARYING_STRING) :: localError
+    INTEGER(INTG) :: numberOfSolvers,solverIdx,solverIdx2,equationsSetIdx,equationsSetIdx2
+    INTEGER(INTG) :: subloopIdx,subloopIdx2,subloopIdx3,iteration3D1D
+    REAL(DP) :: absolute3D0DTolerance,relative3D0DTolerance
+    LOGICAL :: convergedFlag,conditionalWhileLoopContinue
+    character(70) :: label
+
+    ENTERS("NavierStokesDiffAdvDiff_ControlLoopPreLoop",err,error,*999)
+
+    NULLIFY(equationsSet)
+    NULLIFY(coupledEquationsSet)
+    NULLIFY(dependentField)
+    NULLIFY(fieldVariable)
+    conditionalWhileLoopContinue = .FALSE.   !True for solving flow
+    convergedFlag = .FALSE.
+    absolute3D0DTolerance = 0.0_DP
+    relative3D0DTolerance = 0.0_DP
+
+    IF(ASSOCIATED(controlLoop)) THEN
+      SELECT CASE(controlLoop%PROBLEM%specification(3))
+
+      CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+        SELECT CASE(controlLoop%LOOP_TYPE)
+        CASE(PROBLEM_CONTROL_SIMPLE_TYPE)
+          ! Do nothing
+        CASE(PROBLEM_CONTROL_TIME_LOOP_TYPE)
+          IF(controlLoop%CONTROL_LOOP_LEVEL==1) THEN
+            ! set the condition for solving flow problem.
+            NULLIFY(whileLoopConditional)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(controlLoop,2,whileLoopConditional,err,error,*999)
+            whileLoopConditional%while_loop%CONTINUE_LOOP=conditionalWhileLoopContinue
+          END IF
+        CASE(PROBLEM_CONTROL_WHILE_LOOP_TYPE)
+          ! Do nothing
+        CASE DEFAULT
+          localError="The control loop type of "//TRIM(NumberToVString(controlLoop%LOOP_TYPE,"*",err,error))// &
+            & " is invalid for a Coupled 1D0D Navier-Stokes problem."
+          CALL FlagError(localError,err,error,*999)
+        END SELECT
+
+      CASE DEFAULT
+        localError="Problem subtype "//TRIM(NumberToVString(controlLoop%PROBLEM%specification(3),"*",err,error))// &
+          & " is not valid for a Navier-Stokes fluid type of a fluid mechanics problem class."
+        CALL FlagError(localError,err,error,*999)
+      END SELECT
+    ELSE
+      CALL FlagError("Control loop is not associated.",err,error,*999)
+    END IF
+
+    EXITS("NavierStokesDiffAdvDiff_ControlLoopPreLoop")
+    RETURN
+999 ERRORSEXITS("NavierStokesDiffAdvDiff_ControlLoopPreLoop",err,error)
+    RETURN 1
+
+  END SUBROUTINE NavierStokesDiffAdvDiff_ControlLoopPreLoop
+  !
+  !================================================================================================================================
+  !
+
   !>Runs after each control loop iteration
   SUBROUTINE NavierStokesDiffAdvDiff_ControlLoopPostLoop(controlLoop,err,error,*)
 
@@ -2772,13 +2560,13 @@ CONTAINS
         CASE(PROBLEM_CONTROL_SIMPLE_TYPE)
           ! Do nothing
         CASE(PROBLEM_CONTROL_TIME_LOOP_TYPE)
-          IF(controlLoop%CONTROL_LOOP_LEVEL/=0) THEN
+          IF(controlLoop%CONTROL_LOOP_LEVEL/=1) THEN
             ! inner time loop - export data?
             navierStokesSolver=>controlLoop%SUB_LOOPS(1)%ptr%SOLVERS%SOLVERS(2)%ptr
             CALL NAVIER_STOKES_POST_SOLVE_OUTPUT_DATA(navierStokesSolver,err,error,*999)
           END IF
         CASE(PROBLEM_CONTROL_WHILE_LOOP_TYPE)
-          IF(controlLoop%CONTROL_LOOP_LEVEL>1) THEN
+          IF(controlLoop%CONTROL_LOOP_LEVEL>2) THEN
             navierStokesSolver=>controlLoop%SOLVERS%SOLVERS(2)%ptr
             CALL NavierStokes_CoupleCharacteristics(controlLoop,navierStokesSolver,err,error,*999)
           END IF
@@ -2878,6 +2666,21 @@ CONTAINS
                   !Make sure the equations sets are up to date
                   DO equations_set_idx=1,SOLVER_MAPPING%NUMBER_OF_EQUATIONS_SETS
                     EQUATIONS_SET=>SOLVER_MAPPING%EQUATIONS_SETS(equations_set_idx)%ptr
+                    !In case of thermoregulation energy is solver 2 and bioheat is solver 3 but in coupled version
+                    ! energy is solver 1 and bioheat is solver2
+                    SELECT CASE(controlLoop%PROBLEM%SPECIFICATION(3))
+                    CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
+                      energy=2
+                      bioheat=3
+                    CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+                      energy=1
+                      bioheat=2
+                      controlLoop=>controlLoop%parent_loop
+                    CASE DEFAULT
+                      LOCAL_ERROR="Problem subtype "//TRIM(NUMBER_TO_VSTRING(controlLoop%PROBLEM%SPECIFICATION(3),"*", &
+                        & ERR,ERROR))//" is not valid for a coupled Navier-Stokes & diffusion & advection-diffusion type."
+                      CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
+                    END SELECT
 
                     CURRENT_LOOP_ITERATION=controlLoop%TIME_LOOP%ITERATION_NUMBER
                     OUTPUT_ITERATION_NUMBER=controlLoop%TIME_LOOP%OUTPUT_NUMBER !FREQUENCY
@@ -2898,20 +2701,7 @@ CONTAINS
   !          FILE="TRANSIENT_OUTPUT"
 !!!!!!!!ADAPT THIS TO WORK WITH DIFFUSION AND NOT JUST FLUID MECHANICS
                          METHOD="FORTRAN"
-                        !In case of thermoregulation energy is solver 2 and bioheat is solver 3 but in coupled version
-                        ! energy is solver 1 and bioheat is solver2
-                        SELECT CASE(controlLoop%PROBLEM%SPECIFICATION(3))
-                        CASE(PROBLEM_THERMOREGULATION_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE)
-                          energy=2
-                          bioheat=3
-                        CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
-                          energy=1
-                          bioheat=2
-                        CASE DEFAULT
-                          LOCAL_ERROR="Problem subtype "//TRIM(NUMBER_TO_VSTRING(controlLoop%PROBLEM%SPECIFICATION(3),"*", &
-                            & ERR,ERROR))//" is not valid for a coupled Navier-Stokes & diffusion & advection-diffusion type."
-                          CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
-                        END SELECT
+
                         IF(SOLVER%GLOBAL_NUMBER==energy) THEN
                           FILENAME = "./outputArtery/"//"MainTime_"//TRIM(NUMBER_TO_VSTRING(CURRENT_LOOP_ITERATION,"*",ERR,ERROR))
                         ELSE IF(SOLVER%GLOBAL_NUMBER==bioheat) THEN

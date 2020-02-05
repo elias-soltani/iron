@@ -10328,7 +10328,7 @@ CONTAINS
               t(28)= 0.800000 ; q(28)= 16.1121
               t(29)= 1.000000 ; q(29)= 17.39051 !Elias Commented out the flowrate and copied the data from next case and also modified it so it works for next period as well. Also, I added this line to the data.
               !Initialize variables
-              period = 800
+              period = 1000
               m=1
               ! n=28
               n=29 !Elias

@@ -49,6 +49,7 @@ MODULE ADVECTION_EQUATION_ROUTINES
   USE BasisRoutines
   USE BasisAccessRoutines
   USE BOUNDARY_CONDITIONS_ROUTINES
+  USE ComputationEnvironment
   USE Constants
   USE CONTROL_LOOP_ROUTINES
   USE ControlLoopAccessRoutines
@@ -266,7 +267,7 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: error
     !Local Variables
     INTEGER(INTG) :: GEOMETRIC_MESH_COMPONENT,GEOMETRIC_SCALING_TYPE,GEOMETRIC_COMPONENT_NUMBER,NUMBER_OF_DIMENSIONS
-    INTEGER(INTG) :: DEPENDENT_FIELD_NUMBER_OF_VARIABLES,DEPENDENT_FIELD_NUMBER_OF_COMPONENTS,component_idx
+    INTEGER(INTG) :: DEPENDENT_FIELD_NUMBER_OF_VARIABLES,DEPENDENT_FIELD_NUMBER_OF_COMPONENTS,component_idx,componentIdx
     INTEGER(INTG) :: INDEPENDENT_FIELD_NUMBER_OF_VARIABLES,INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS,NUMBER_OF_SOURCE_COMPONENTS
     TYPE(DECOMPOSITION_TYPE), POINTER :: GEOMETRIC_DECOMPOSITION
     TYPE(EquationsType), POINTER :: equations
@@ -360,12 +361,13 @@ CONTAINS
                 & NUMBER_OF_DIMENSIONS,err,error,*999)
               !number of components for U,delU/delN (C)
               DEPENDENT_FIELD_NUMBER_OF_COMPONENTS=1
+              component_idx=2
               CALL FIELD_NUMBER_OF_COMPONENTS_SET_AND_LOCK(EQUATIONS_SET%DEPENDENT%DEPENDENT_FIELD, &
                 & FIELD_U_VARIABLE_TYPE,DEPENDENT_FIELD_NUMBER_OF_COMPONENTS,err,error,*999)
               CALL FIELD_NUMBER_OF_COMPONENTS_SET_AND_LOCK(EQUATIONS_SET%DEPENDENT%DEPENDENT_FIELD, &
                 & FIELD_DELUDELN_VARIABLE_TYPE,DEPENDENT_FIELD_NUMBER_OF_COMPONENTS,err,error,*999)
               CALL FIELD_COMPONENT_MESH_COMPONENT_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
-                & DEPENDENT_FIELD_NUMBER_OF_COMPONENTS,GEOMETRIC_MESH_COMPONENT,err,error,*999)
+                & component_idx,GEOMETRIC_MESH_COMPONENT,err,error,*999)
               !Default to the geometric interpolation setup
               DO component_idx=1,DEPENDENT_FIELD_NUMBER_OF_COMPONENTS
                 CALL FIELD_COMPONENT_MESH_COMPONENT_SET(EQUATIONS_SET%DEPENDENT%DEPENDENT_FIELD, &
@@ -637,81 +639,96 @@ CONTAINS
           !Set start action
           CASE(EQUATIONS_SET_SETUP_START_ACTION)
             INDEPENDENT_FIELD_NUMBER_OF_VARIABLES=1
-            INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS=1
+            INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS=22
             !Create the auto created independent field
             IF(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD_AUTO_CREATED) THEN
               !start field creation with name 'INDEPENDENT_FIELD'
               CALL FIELD_CREATE_START(EQUATIONS_SET_SETUP%FIELD_USER_NUMBER,EQUATIONS_SET%REGION, &
                 & EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,err,error,*999)
-                !start creation of a new field
-                CALL FIELD_TYPE_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,FIELD_GENERAL_TYPE,err,error,*999)
-                !label the field
-                CALL FIELD_LABEL_SET(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,"Independent Field",err,error,*999)
-                !define new created field to be independent
-                CALL FIELD_DEPENDENT_TYPE_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
-                  & FIELD_INDEPENDENT_TYPE,err,error,*999)
-                !look for decomposition rule already defined
-                CALL FIELD_MESH_DECOMPOSITION_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,GEOMETRIC_DECOMPOSITION,err,error,*999)
-                !apply decomposition rule found on new created field
-                CALL FIELD_MESH_DECOMPOSITION_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
-                  & GEOMETRIC_DECOMPOSITION,err,error,*999)
-                !point new field to geometric field
-                CALL FIELD_GEOMETRIC_FIELD_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,EQUATIONS_SET% &
-                  & GEOMETRY%GEOMETRIC_FIELD,err,error,*999)
-                !set number of variables to 1 (1 for U)
-                CALL FIELD_NUMBER_OF_VARIABLES_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
-                  & INDEPENDENT_FIELD_NUMBER_OF_VARIABLES,err,error,*999)
-                CALL FIELD_VARIABLE_TYPES_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,[FIELD_U_VARIABLE_TYPE], &
-                  & err,error,*999)
-                CALL FIELD_DIMENSION_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,FIELD_U_VARIABLE_TYPE, &
-                  & FIELD_VECTOR_DIMENSION_TYPE,err,error,*999)
-                !calculate number of components with one component for each dimension
-                CALL FIELD_NUMBER_OF_COMPONENTS_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
-                  & FIELD_U_VARIABLE_TYPE,INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS,err,error,*999)
-                CALL FIELD_COMPONENT_MESH_COMPONENT_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
-                  & 1,GEOMETRIC_MESH_COMPONENT,err,error,*999)
-                !Default to the geometric interpolation setup
+              !start creation of a new field
+              CALL FIELD_TYPE_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,FIELD_GENERAL_TYPE,err,error,*999)
+              !label the field
+              CALL FIELD_LABEL_SET(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,"Independent Field",err,error,*999)
+              !define new created field to be independent
+              CALL FIELD_DEPENDENT_TYPE_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
+                & FIELD_INDEPENDENT_TYPE,err,error,*999)
+              !look for decomposition rule already defined
+              CALL FIELD_MESH_DECOMPOSITION_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,GEOMETRIC_DECOMPOSITION,err,error,*999)
+              !apply decomposition rule found on new created field
+              CALL FIELD_MESH_DECOMPOSITION_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
+                & GEOMETRIC_DECOMPOSITION,err,error,*999)
+              !point new field to geometric field
+              CALL FIELD_GEOMETRIC_FIELD_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,EQUATIONS_SET% &
+                & GEOMETRY%GEOMETRIC_FIELD,err,error,*999)
+              !set number of variables to 1 (1 for U)
+              CALL FIELD_NUMBER_OF_VARIABLES_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
+                & INDEPENDENT_FIELD_NUMBER_OF_VARIABLES,err,error,*999)
+              CALL FIELD_VARIABLE_TYPES_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,[FIELD_U_VARIABLE_TYPE], &
+                & err,error,*999)
+              CALL FIELD_VARIABLE_LABEL_SET(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,FIELD_U_VARIABLE_TYPE, &
+                 & "U",err,error,*999)
+              CALL FIELD_DIMENSION_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,FIELD_U_VARIABLE_TYPE, &
+                & FIELD_VECTOR_DIMENSION_TYPE,err,error,*999)
+              CALL FIELD_DATA_TYPE_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,FIELD_U_VARIABLE_TYPE, &
+                & FIELD_DP_TYPE,err,error,*999)
+              !calculate number of components with one component for each dimension
+              CALL FIELD_NUMBER_OF_COMPONENTS_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
+                & FIELD_U_VARIABLE_TYPE,INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS,err,error,*999)
+              CALL FIELD_COMPONENT_MESH_COMPONENT_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
+                & 1,GEOMETRIC_MESH_COMPONENT,err,error,*999)
+              !Default to the geometric interpolation setup
+              DO componentIdx=1,INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS
+                ! CALL FIELD_COMPONENT_MESH_COMPONENT_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,FIELD_U_VARIABLE_TYPE, &
+                !   & componentIdx,GEOMETRIC_MESH_COMPONENT,err,error,*999)
                 CALL FIELD_COMPONENT_MESH_COMPONENT_SET(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
-                  & FIELD_U_VARIABLE_TYPE,INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS,GEOMETRIC_MESH_COMPONENT,err,error,*999)
-                SELECT CASE(EQUATIONS_SET%SOLUTION_METHOD)
-                !Specify fem solution method
-                CASE(EQUATIONS_SET_FEM_SOLUTION_METHOD)
+                  & FIELD_U_VARIABLE_TYPE,componentIdx,GEOMETRIC_MESH_COMPONENT,err,error,*999)
+              END DO !componentIdx
+              SELECT CASE(EQUATIONS_SET%SOLUTION_METHOD)
+              !Specify fem solution method
+              CASE(EQUATIONS_SET_FEM_SOLUTION_METHOD)
+                DO componentIdx=1,INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS
                   CALL FIELD_COMPONENT_INTERPOLATION_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
-                    & FIELD_U_VARIABLE_TYPE,INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS,FIELD_NODE_BASED_INTERPOLATION,err,error,*999)
-                  CALL FIELD_SCALING_TYPE_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,GEOMETRIC_SCALING_TYPE, &
-                    & err,error,*999)
-                  CALL FIELD_SCALING_TYPE_SET(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,GEOMETRIC_SCALING_TYPE, &
-                    & err,error,*999)
-                CASE(EQUATIONS_SET_NODAL_SOLUTION_METHOD)
-                  CALL FIELD_COMPONENT_INTERPOLATION_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
-                    & FIELD_U_VARIABLE_TYPE,INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS,FIELD_NODE_BASED_INTERPOLATION,err,error,*999)
-                  CALL FIELD_SCALING_TYPE_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,GEOMETRIC_SCALING_TYPE, &
-                    & err,error,*999)
-                  CALL FIELD_SCALING_TYPE_SET(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,GEOMETRIC_SCALING_TYPE, &
-                    & err,error,*999)
-                CASE DEFAULT
-                  localError="The solution method of " &
-                    & //TRIM(NumberToVString(EQUATIONS_SET%SOLUTION_METHOD,"*",err,error))// " is invalid."
-                  CALL FlagError(localError,err,error,*999)
-                END SELECT
-              ELSE
-                !Check the user specified field- Characteristic equation
-                CALL FIELD_TYPE_CHECK(EQUATIONS_SET_SETUP%FIELD,FIELD_GENERAL_TYPE,err,error,*999)
-                CALL FIELD_DIMENSION_CHECK(EQUATIONS_SET_SETUP%FIELD,FIELD_U_VARIABLE_TYPE,FIELD_VECTOR_DIMENSION_TYPE, &
+                    & FIELD_U_VARIABLE_TYPE,componentIdx,FIELD_NODE_BASED_INTERPOLATION,err,error,*999)
+                END DO !componentIdx
+                CALL FIELD_SCALING_TYPE_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,GEOMETRIC_SCALING_TYPE, &
                   & err,error,*999)
-                CALL FIELD_DATA_TYPE_CHECK(EQUATIONS_SET_SETUP%FIELD,FIELD_U_VARIABLE_TYPE,FIELD_DP_TYPE,err,error,*999)
-              ENDIF
-            !Specify finish action
-            CASE(EQUATIONS_SET_SETUP_FINISH_ACTION)
-              IF(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD_AUTO_CREATED) THEN
-                CALL FIELD_CREATE_FINISH(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,err,error,*999)
-              ENDIF
-            CASE DEFAULT
-              localError="The action type of "//TRIM(NumberToVString(EQUATIONS_SET_SETUP%ACTION_TYPE,"*",err,error))// &
-                & " for a setup type of "//TRIM(NumberToVString(EQUATIONS_SET_SETUP%SETUP_TYPE,"*",err,error))// &
-                & " is invalid for a standard Navier-Stokes fluid"
-              CALL FlagError(localError,err,error,*999)
-            END SELECT
+                CALL FIELD_SCALING_TYPE_SET(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,GEOMETRIC_SCALING_TYPE, &
+                  & err,error,*999)
+              CASE(EQUATIONS_SET_NODAL_SOLUTION_METHOD)
+                CALL FIELD_COMPONENT_INTERPOLATION_SET_AND_LOCK(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD, &
+                  & FIELD_U_VARIABLE_TYPE,INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS,FIELD_NODE_BASED_INTERPOLATION,err,error,*999)
+                CALL FIELD_SCALING_TYPE_GET(EQUATIONS_SET%GEOMETRY%GEOMETRIC_FIELD,GEOMETRIC_SCALING_TYPE, &
+                  & err,error,*999)
+                CALL FIELD_SCALING_TYPE_SET(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,GEOMETRIC_SCALING_TYPE, &
+                  & err,error,*999)
+              CASE DEFAULT
+                localError="The solution method of " &
+                  & //TRIM(NumberToVString(EQUATIONS_SET%SOLUTION_METHOD,"*",err,error))// " is invalid."
+                CALL FlagError(localError,err,error,*999)
+              END SELECT
+            ELSE
+              !Check the user specified field- Characteristic equation
+              CALL FIELD_TYPE_CHECK(EQUATIONS_SET_SETUP%FIELD,FIELD_GENERAL_TYPE,err,error,*999)
+              CALL FIELD_DEPENDENT_TYPE_CHECK(EQUATIONS_SET_SETUP%FIELD,FIELD_INDEPENDENT_TYPE,err,error,*999)
+              CALL FIELD_NUMBER_OF_VARIABLES_CHECK(EQUATIONS_SET_SETUP%FIELD,1,err,error,*999)
+              CALL FIELD_VARIABLE_TYPES_CHECK(EQUATIONS_SET_SETUP%FIELD,[FIELD_U_VARIABLE_TYPE],err,error,*999)
+              CALL FIELD_DIMENSION_CHECK(EQUATIONS_SET_SETUP%FIELD,FIELD_U_VARIABLE_TYPE,FIELD_VECTOR_DIMENSION_TYPE, &
+                & err,error,*999)
+              CALL FIELD_DATA_TYPE_CHECK(EQUATIONS_SET_SETUP%FIELD,FIELD_U_VARIABLE_TYPE,FIELD_DP_TYPE,err,error,*999)
+              CALL FIELD_NUMBER_OF_COMPONENTS_CHECK(EQUATIONS_SET_SETUP%FIELD,FIELD_U_VARIABLE_TYPE, &
+                & INDEPENDENT_FIELD_NUMBER_OF_COMPONENTS,err,error,*999)
+            ENDIF
+          !Specify finish action
+          CASE(EQUATIONS_SET_SETUP_FINISH_ACTION)
+            IF(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD_AUTO_CREATED) THEN
+              CALL FIELD_CREATE_FINISH(EQUATIONS_SET%INDEPENDENT%INDEPENDENT_FIELD,err,error,*999)
+            ENDIF
+          CASE DEFAULT
+            localError="The action type of "//TRIM(NumberToVString(EQUATIONS_SET_SETUP%ACTION_TYPE,"*",err,error))// &
+              & " for a setup type of "//TRIM(NumberToVString(EQUATIONS_SET_SETUP%SETUP_TYPE,"*",err,error))// &
+              & " is invalid for a standard Navier-Stokes fluid"
+            CALL FlagError(localError,err,error,*999)
+          END SELECT
         !-----------------------------------------------------------------
         ! E q u a t i o n s    t y p e
         !-----------------------------------------------------------------
@@ -1068,10 +1085,11 @@ CONTAINS
     LOGICAL :: updateDampingMatrix,updateStiffnessMatrix
 
     REAL(DP) :: tt,tmax,Qo,VALUE,le,Pe,beta,period,Coth,TIME,deltaTime !Elias
-
-
-    updateDampingMatrix = .FALSE.
-    updateStiffnessMatrix = .FALSE.
+    INTEGER(INTG) :: Uinterp,timeStep,comp1,comp2,myComputationalNodeNumber
+    REAL(DP) :: Tw,Qinterp,Ainterp
+    ! updateDampingMatrix = .FALSE.
+    ! updateStiffnessMatrix = .FALSE.
+    ! Elias I don't know why they were set to false.
 
     ENTERS("ADVECTION_EQUATION_FINITE_ELEMENT_CALCULATE",err,error,*999)
 
@@ -1234,12 +1252,13 @@ CONTAINS
 !          & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE .OR. &
 !          & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_COUPLED_SOURCE_DIFFUSION_ADVEC_DIFFUSION_SUBTYPE) THEN !Elias */
           sourceVector=>vectorMatrices%sourceVector
+          sourceVector%elementVector%vector=0.0_DP ! New coupling
 !        ENDIF !Elias /*
 
           SELECT CASE(EQUATIONS_SET%specification(3))
           CASE(EQUATIONS_SET_ADVECTION_DIFFUSION_SUBTYPE)
             CALL FIELD_INTERPOLATION_PARAMETERS_ELEMENT_GET(FIELD_VALUES_SET_TYPE,ELEMENT_NUMBER,equations%interpolation% &
-              & dependentInterpParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+              & dependentInterpParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999) ! Elias We do not use this?
             CALL FIELD_INTERPOLATION_PARAMETERS_ELEMENT_GET(FIELD_VALUES_SET_TYPE,ELEMENT_NUMBER,equations%interpolation% &
               & independentInterpParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
             CALL FIELD_INTERPOLATION_PARAMETERS_ELEMENT_GET(FIELD_VALUES_SET_TYPE,ELEMENT_NUMBER,equations%interpolation% &
@@ -1259,7 +1278,7 @@ CONTAINS
             !Loop over gauss points
             DO ng=1,QUADRATURE_SCHEME%NUMBER_OF_GAUSS
               CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,ng,equations%interpolation% &
-                & dependentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+                & dependentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999) ! Elias is this redundant?
               CALL FIELD_INTERPOLATE_GAUSS(NO_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,ng,equations%interpolation% &
                 & independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
               CALL FIELD_INTERPOLATE_GAUSS(NO_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,ng,equations%interpolation% &
@@ -1281,32 +1300,53 @@ CONTAINS
 !              Conc=equations%interpolation%dependentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1,NO_PART_DERIV)
 !              dConc=equations%interpolation%dependentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1,FIRST_PART_DERIV)
 !              velocity=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1,NO_PART_DERIV)
-              period = 800.0
-              TIME=equations_set%currentTime
-              tt=MOD(TIME*1000.0_DP,period)
-              tmax=150.0_DP
-              Qo=100000.0_DP
-              VALUE=(Qo*tt/(tmax**2.0_DP))*EXP(-(tt**2.0_DP)/(2.0_DP*(tmax**2.0_DP)))
-              flow=VALUE*0.000001_DP
-              area= 0.000007065_DP
-              velocity=flow/area
+              Uinterp= 1 ! 0 for old 1 for new
+              SELECT CASE(Uinterp)
+              CASE(0)
+                period = 800.0
+                TIME=equations_set%currentTime
+                tt=MOD(TIME*1000.0_DP,period)
+                tmax=150.0_DP
+                Qo=100000.0_DP
+                VALUE=(Qo*tt/(tmax**2.0_DP))*EXP(-(tt**2.0_DP)/(2.0_DP*(tmax**2.0_DP)))
+                flow=VALUE*0.000001_DP
+                area= 0.000007065_DP
+                velocity=flow/area
+                cCoeff=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(2,NO_PART_DERIV) ! linear source b-cT
+                C_PARAM=equations%interpolation%sourceInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1, NO_PART_DERIV)
+              CASE(1)
+                Tw = 36 ! TODO change this line. We need to evaluate Tw.
+                period = 1.0
+                TIME=equations_set%currentTime
+                tt=MOD(TIME,period)
+                timeStep=NINT(tt/0.1)+1
+                IF (timeStep==1) timeStep=11
+                comp1=timeStep*2-1
+                comp2=timeStep*2
+                Qinterp=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(comp1,NO_PART_DERIV)
+                Ainterp=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(comp2,NO_PART_DERIV)
+                Qinterp=1000*Qinterp !convert from ml/s to mm3/s
+                velocity=Qinterp/Ainterp
+                cCoeff=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(2,NO_PART_DERIV)/Ainterp ! linear source b-cT
+                C_PARAM=cCoeff*Tw
+              END SELECT
 !              area=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(2,NO_PART_DERIV)
               diffusivity=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1,NO_PART_DERIV)
 !              le=0.05_DP/6.0
-              le=GEOMETRIC_FIELD%geometric_field_parameters%lengths(ELEMENT_NUMBER)
+              le=GEOMETRIC_FIELD%geometric_field_parameters%lengths(ELEMENT_NUMBER) ! le = sum_ng(  |J| * Wg )
               Pe=velocity*le/(2*diffusivity)
               beta=0.0_DP
               IF(Pe>1) THEN
                 beta=1.0_DP/tanh(Pe)-1.0_DP/Pe
               ENDIF
-              diffusivity=diffusivity+velocity*beta*le/2.0_DP
-              cCoeff=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(2,NO_PART_DERIV) ! linear source b-cT
+              diffusivity=diffusivity+velocity*beta*le/2.0_DP*velocity/ABS(velocity)
+
 
               mhs=0
-              MESH_COMPONENT=FIELD_VARIABLE%COMPONENTS(1)%MESH_COMPONENT_NUMBER
-              DEPENDENT_BASIS=>DEPENDENT_FIELD%DECOMPOSITION%DOMAIN(MESH_COMPONENT)%ptr% &
-                & TOPOLOGY%ELEMENTS%ELEMENTS(ELEMENT_NUMBER)%BASIS
-              QUADRATURE_SCHEME=>DEPENDENT_BASIS%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%ptr
+              ! MESH_COMPONENT=FIELD_VARIABLE%COMPONENTS(1)%MESH_COMPONENT_NUMBER
+              ! DEPENDENT_BASIS=>DEPENDENT_FIELD%DECOMPOSITION%DOMAIN(MESH_COMPONENT)%ptr% &  ! Elias. redundant? We have it above.
+              !   & TOPOLOGY%ELEMENTS%ELEMENTS(ELEMENT_NUMBER)%BASIS
+              ! QUADRATURE_SCHEME=>DEPENDENT_BASIS%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%ptr ! Elias. redundant? We have it above.
               JGW=equations%interpolation%geometricInterpPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%JACOBIAN* &
                 & QUADRATURE_SCHEME%GAUSS_WEIGHTS(ng)
               ELEMENTS_TOPOLOGY=>FIELD_VARIABLE%COMPONENTS(1)%DOMAIN%TOPOLOGY%ELEMENTS
@@ -1320,7 +1360,7 @@ CONTAINS
                     & PTR%DXI_DX(xiIdx,coordIdx))**2.0_DP
                 END DO !coordIdx
               END DO !xiIdx
-              DXI_DX=SQRT(DXI_DX)
+              DXI_DX=SQRT(DXI_DX) ! DXI_DX = 1.0/|J|
 
               !Loop over element rows
               DO ms=1,DEPENDENT_BASIS%NUMBER_OF_ELEMENT_PARAMETERS
@@ -1359,7 +1399,7 @@ CONTAINS
 !              & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_CONSTANT_SOURCE_ALE_DIFFUSION_SUBTYPE .OR. &
 !              & EQUATIONS_SET%SPECIFICATION(3)==EQUATIONS_SET_LINEAR_SOURCE_ALE_DIFFUSION_SUBTYPE) THEN
               IF(sourceVector%updateVector) THEN
-                C_PARAM=equations%interpolation%sourceInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1, NO_PART_DERIV)
+
                 mhs=0
 !                DO mh=1,FIELD_VARIABLE%NUMBER_OF_COMPONENTS
 !                  Loop over element rows
@@ -1371,7 +1411,6 @@ CONTAINS
 !                ENDDO mh
               ENDIF
 !            ENDIF
-
             ENDDO !ng
 
           CASE DEFAULT

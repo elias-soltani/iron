@@ -80,6 +80,7 @@ MODULE NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_ROUTINES
   USE Strings
   USE SOLVER_ROUTINES
   USE SolverMappingAccessRoutines
+  USE SolverMatricesAccessRoutines
   USE SolverAccessRoutines
   USE Timer
   USE Types
@@ -2530,17 +2531,27 @@ CONTAINS
     TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
     !Local Variables
     TYPE(CONTROL_LOOP_TYPE), POINTER :: subloop,subloop2,subloop3,iterativeWhileLoop2,iterativeWhileLoop3
-    TYPE(SOLVER_TYPE), POINTER :: navierStokesSolver,navierStokesSolver3D,navierStokesSolver1D,solver
+    TYPE(SOLVER_TYPE), POINTER :: navierStokesSolver,navierStokesSolver3D,navierStokesSolver1D,solverDiffusion
     TYPE(SOLVER_MAPPING_TYPE), POINTER :: solverMapping,solverMapping2
     TYPE(EQUATIONS_SET_TYPE), POINTER :: equationsSet,equationsSet2,coupledEquationsSet
     TYPE(FIELD_TYPE), POINTER :: dependentField
     TYPE(FIELD_VARIABLE_TYPE), POINTER :: fieldVariable
     TYPE(VARYING_STRING) :: localError
+    TYPE(SOLVERS_TYPE), POINTER :: solvers
+    TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: solverEquations
+    TYPE(EquationsType), POINTER :: equations
+    TYPE(EquationsVectorType), POINTER :: vectorEquations
+    TYPE(EquationsMatricesVectorType), POINTER :: vectorMatrices
+    TYPE(SOLVER_MATRICES_TYPE), POINTER :: solverMatrices
+    TYPE(SOLVER_MATRIX_TYPE), POINTER :: solverMatrix
+    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: boundaryConditions
+    TYPE(BoundaryConditionsRobinType), POINTER :: robinConditions
     INTEGER(INTG) :: numberOfSolvers,solverIdx,solverIdx2,equationsSetIdx,equationsSetIdx2
     INTEGER(INTG) :: subloopIdx,subloopIdx2,subloopIdx3,iteration3D1D
     REAL(DP) :: absolute3D0DTolerance,relative3D0DTolerance
     LOGICAL :: convergedFlag
     character(70) :: label
+    REAL(DP) :: currentTime,timeIncrement
 
     ENTERS("NavierStokesDiffAdvDiff_ControlLoopPostLoop",err,error,*999)
 
@@ -2558,7 +2569,44 @@ CONTAINS
       CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
         SELECT CASE(controlLoop%LOOP_TYPE)
         CASE(PROBLEM_CONTROL_SIMPLE_TYPE)
-          ! Do nothing
+          ! For bioheat equaiton in tissue, we do not need to update all the matrices
+          CALL ControlLoop_CurrentTimesGet(controlLoop,currentTime,timeIncrement,err,error,*999)
+          !Only two time steps allowed to update the matrices
+          IF (currentTime>=2*timeIncrement)THEN
+            IF(controlLoop%control_loop_level==2 .AND. controlLoop%sub_loop_index==3) THEN
+              NULLIFY(solvers)
+              CALL CONTROL_LOOP_SOLVERS_GET(controlLoop,solvers,err,error,*999)
+  !!!-- B I O H E A T --!!!
+              !Set the second solver to be a linear solver for the diffusion problem
+              NULLIFY(solverDiffusion)
+              CALL SOLVERS_SOLVER_GET(solvers,2,solverDiffusion,err,error,*999)
+              NULLIFY(solverEquations)
+              NULLIFY(solverMapping)
+              NULLIFY(equationsSet)
+              NULLIFY(equations)
+              NULLIFY(vectorEquations)
+              NULLIFY(vectorMatrices)
+              CALL Solver_SolverEquationsGet(solverDiffusion,solverEquations,err,error,*999)
+              CALL SolverEquations_SolverMappingGet(solverEquations,solverMapping,err,error,*999)
+              CALL SolverMapping_EquationsSetGet(solverMapping,1,equationsSet,err,error,*999)
+              CALL EquationsSet_EquationsGet(equationsSet,equations,err,error,*999)
+              CALL Equations_VectorEquationsGet(equations,vectorEquations,err,error,*999)
+              CALL EquationsVector_VectorMatricesGet(vectorEquations,vectorMatrices,err,error,*999)
+              vectorMatrices%dynamicMatrices%matrices(1)%ptr%updateMatrix=.FALSE.
+              vectorMatrices%dynamicMatrices%matrices(2)%ptr%updateMatrix=.FALSE.
+              NULLIFY(solverMatrices)
+              NULLIFY(solverMatrix)
+              CALL SolverEquations_SolverMatricesGet(solverEquations,solverMatrices,err,error,*999)
+              CALL SolverMatrices_SolverMatrixGet(solverMatrices,1,solverMatrix,err,error,*999)
+              solverMatrix%update_matrix=.FALSE.
+              NULLIFY(boundaryConditions)
+              CALL SolverEquations_BoundaryConditionsGet(solverEquations,boundaryConditions,err,error,*999)
+              robinConditions=>boundaryConditions%robinBoundaryConditions
+              IF(ASSOCIATED(robinConditions)) THEN
+                robinConditions%updateMatrix=.FALSE.
+              END IF
+            END IF
+          END IF
         CASE(PROBLEM_CONTROL_TIME_LOOP_TYPE)
           IF(controlLoop%CONTROL_LOOP_LEVEL/=1) THEN
             ! inner time loop - export data?

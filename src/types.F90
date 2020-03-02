@@ -2057,28 +2057,6 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
 !    TYPE(BoundaryConditionsValuesType), POINTER ::
 !  END TYPE BoundaryConditionsValuesPtrType
 
-  TYPE RobinValuesType
-!ELIAS
-    REAL(DP) :: U_Coefficient !<Stores coefficient of U for Robin boundary Conditions Alpha*T+Beta*DelTDeln=Gamma
-    REAL(DP) :: DelUDeln_Coefficient !<Stores coefficient of DelUDeln for Robin boundary Conditions Alpha*T+Beta*DelTDeln=Gamma
-    REAL(DP) :: robinValue !<Stores Gamma Alpha*T+Beta*DelTDeln=Gamma
-  END TYPE RobinValuesType
-
-  TYPE BoundaryConditionsValuesType
-!Elias
-    INTEGER(INTG) :: boundary
-    LOGICAL(INTG) :: boundaryNode !<Is .TRUE. if the node is on boundary
-    REAL(DP) :: dirichletValue  !<Stores node value for Dirichlet boundary conditions
-    REAL(DP) :: neumannValue  !<Stores node value for Neumann boundary conditions
-    TYPE(RobinValuesType), POINTER :: robinValues !<A pointer to the Robin coefficients and values.
-    TYPE(BoundaryConditionsDofType), POINTER :: dofType !Elias
-  END TYPE BoundaryConditionsValuesType
-
-  TYPE BoundaryConditionsDofType
-!Elias
-    INTEGER(INTG) :: rowBCtype
-    REAL(DP), ALLOCATABLE :: values(:)
-  END TYPE BoundaryConditionsDofType
 
   TYPE BoundaryConditions_Dof2valueParam_map
     INTEGER(INTG) :: numberOfvalues
@@ -2096,7 +2074,7 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
 !Elias
     INTEGER(INTG), ALLOCATABLE :: setDofs(:) !<setDofs(robin_idx): the global dof for the robin_idx'th Robin condition
     INTEGER(INTG) :: robinMatrixSparsity !<The sparsity type of the Robin integration matrices. \see SOLVER_ROUTINES_SparsityTypes,SOLVER_ROUTINES
-!    INTEGER(INTG) :: robinMatrixSparsity !<The sparsity type of the Robin integration matrices. \see SOLVER_ROUTINES_SparsityTypes,SOLVER_ROUTINES
+    LOGICAL :: updateMatrix !<Is .TRUE. if this equations matrix is to be updated
     TYPE(DistributedMatrixType), POINTER :: robinMatrix !<The R matrix that multiplies by h vector and adds to the RHS vector. Number of rows equals number of local dofs, and number of columns equals number of set point DOFs.
     TYPE(DistributedVectorType), POINTER :: heatFlux !<The vector of values of q_h which is h*T_inf in Robin BCs. q=q_h-h*T.
     TYPE(DistributedVectorType), POINTER :: convectionCoeff !<A vector with the convection heat transfer coefficient values. i.e. h values.
@@ -2110,11 +2088,6 @@ END TYPE GENERATED_MESH_ELLIPSOID_TYPE
     INTEGER(INTG) :: NUMBER_OF_BOUNDARY_CONDITIONS_VARIABLES !<The number of boundary conditions variables
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_PTR_TYPE), ALLOCATABLE :: BOUNDARY_CONDITIONS_VARIABLES(:) !<BOUNDARY_CONDITIONS_VARIABLES(variable_idx). BOUNDARY_CONDITIONS_VARIABLES(variable_idx)%PTR is the pointer to the variable_idx'th boundary conditions variable. variable_idx ranges from 1 to NUMBER_OF_BOUNDARY_CONDITIONS_VARIABLES
     INTEGER(INTG) :: neumannMatrixSparsity !<The sparsity type of the Neumann integration matrices. \see SOLVER_ROUTINES_SparsityTypes,SOLVER_ROUTINES
-    TYPE(EquationsMatrixType), POINTER :: robinDynamicMatrix !<A pointer to the equations matrix.   !Elias
-    TYPE(EquationsMatrixType), POINTER :: robinVector !<A pointer to the equations matrix.   !Elias
-    TYPE(BoundaryConditionsValuesType), ALLOCATABLE :: boundaryConditionsValues(:)     !Elias
-    INTEGER(INTG), ALLOCATABLE :: rowBoundaryConditionsDofType(:) !Elias
-    TYPE(BoundaryConditionsDofTypes), POINTER :: dofTypes !Elias
     TYPE(BoundaryConditionsRobinType), POINTER :: robinBoundaryConditions !Elias
   END TYPE BOUNDARY_CONDITIONS_TYPE
 

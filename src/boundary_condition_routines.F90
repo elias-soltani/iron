@@ -973,10 +973,10 @@ CONTAINS
           SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%neumannMatrixSparsity=BOUNDARY_CONDITION_SPARSE_MATRICES
           numberOfDofs=solver_equations%solver_mapping%equations_sets(1)%ptr &
             & %equations%vectorEquations%vectorMapping%numberOfRows
-          ALLOCATE(SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%rowBoundaryConditionsDofType(numberOfDofs),STAT=ERR) !225 is wrong Elias
+          ! ALLOCATE(SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%rowBoundaryConditionsDofType(numberOfDofs),STAT=ERR) !225 is wrong Elias
           IF(ERR/=0) CALL FlagError("Could not allocate global boundary condition types.",ERR,ERROR,*999)
-          SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%rowBoundaryConditionsDofType=0
-          CALL BoundaryConditions_ValuesInitialise(SOLVER_EQUATIONS%BOUNDARY_CONDITIONS,ERR,ERROR,*999) !Elias
+          ! SOLVER_EQUATIONS%BOUNDARY_CONDITIONS%rowBoundaryConditionsDofType=0
+          ! CALL BoundaryConditions_ValuesInitialise(SOLVER_EQUATIONS%BOUNDARY_CONDITIONS,ERR,ERROR,*999) !Elias
           DO equations_set_idx=1,SOLVER_EQUATIONS%SOLVER_MAPPING%NUMBER_OF_EQUATIONS_SETS
             EQUATIONS_SET=>SOLVER_EQUATIONS%SOLVER_MAPPING%EQUATIONS_SETS(equations_set_idx)%PTR
             IF(ASSOCIATED(EQUATIONS_SET)) THEN
@@ -4293,160 +4293,6 @@ CONTAINS
   !
   !================================================================================================================================
   !
-
-  !> Elias Initialise the boundary conditions values.
-  SUBROUTINE BoundaryConditions_ValuesInitialise(boundaryConditions,ERR,ERROR,*)
-
-    !Argument variables
-    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: boundaryConditions !<A pointer to the boundary conditions to initialise a boundary conditions values for.
-
-    INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
-    TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
-    !Local Variables
-!    TYPE(BoundaryConditionsValuesType), POINTER :: boundaryConditionsValues(:)
-    TYPE(RobinValuesType), POINTER :: robinValues
-    TYPE(BoundaryConditionsDofType), POINTER :: dofType
-    integer(INTG) :: NumberOfNodes,nodeIdx
-
-    ENTERS("BoundaryConditions_ValuesInitialise",ERR,ERROR,*998)
-
-
-
-    NumberOfNodes = boundaryConditions%solver_equations%solver_mapping%equations_sets(1)%ptr &
-      & %equations%vectorEquations%vectorMapping%numberOfRows
-
-    IF(ASSOCIATED(boundaryConditions)) THEN
-!      NULLIFY(boundaryConditionsValues)
-!      boundaryConditionsValues=>boundaryConditions%boundaryConditionsValues
-!      IF(.NOT.ASSOCIATED(boundaryConditionsValues))
-        ALLOCATE(boundaryConditions%boundaryConditionsValues(NumberOfNodes),STAT=ERR)
-        IF(ERR/=0) CALL FlagError("Could not allocate boundaryConditionsValues." ,ERR,ERROR,*998)
-!        boundaryConditionsValues=>boundaryConditions%boundaryConditionsValues
-        boundaryConditions%boundaryConditionsValues%boundary = 0
-        boundaryConditions%boundaryConditionsValues%boundaryNode = .FALSE.
-        boundaryConditions%boundaryConditionsValues%dirichletValue = 0.0
-        boundaryConditions%boundaryConditionsValues%neumannValue = 0.0
-
-!        ALLOCATE(boundaryConditions%dofTypes%rowBCtypes(NumberOfNodes),STAT=ERR)
-!        IF(ERR/=0) CALL FlagError("Could not allocate rowBCtypes." ,ERR,ERROR,*998)
-!        boundaryConditions%dofTypes%numberOfValues=0
-
-
-        NULLIFY(robinValues)
-        DO nodeIdx =1,NumberOfNodes
-          ALLOCATE(boundaryConditions%boundaryConditionsValues(nodeIdx)%robinValues,STAT=ERR)
-          IF(ERR/=0) CALL FlagError("Could not allocate robinValues.",ERR,ERROR,*998)
-          robinValues=>boundaryConditions%boundaryConditionsValues(nodeIdx)%robinValues
-          ALLOCATE(boundaryConditions%boundaryConditionsValues(nodeIdx)%dofType,STAT=ERR)
-          IF(ERR/=0) CALL FlagError("Could not allocate dofType.",ERR,ERROR,*998)
-          dofType=>boundaryConditions%boundaryConditionsValues(nodeIdx)%dofType
-!          ALLOCATE(robinValues,STAT=ERR)
-          robinValues%U_Coefficient = 0.0
-          robinValues%DelUDeln_Coefficient=0.0
-          robinValues%robinValue=0.0
-          dofType%rowBCtype=0
-!          boundaryConditions%dofTypes%rowBCtypes(NodeIdx)=0
-        END DO
-
-    ELSE
-      CALL FlagError("boundaryConditions is not associated.",ERR,ERROR,*998)
-    ENDIF
-
-!\TODO: Finalise for this routine. Also number of nedes should be inserted from somewhere else.
-    EXITS("BoundaryConditions_ValuesInitialise")
-    RETURN
-998 ERRORSEXITS("BoundaryConditions_ValuesInitialise",ERR,ERROR)
-    RETURN 1
-  END SUBROUTINE BoundaryConditions_ValuesInitialise
-
-  !
-  !================================================================================================================================
-  !
-  !> Elias Set the boundary conditions values.
-!  SUBROUTINE BoundaryConditions_ValuesSet(boundaryConditions,boundaryGeneralType,NodeIdx,VALUE,ERR,ERROR,*)
-
-!    !Argument variables
-!    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: boundaryConditions !<A pointer to the boundary conditions to set boundary conditions values for.
-!
-!    INTEGER(INTG), INTENT(IN) :: boundaryGeneralType !<Could be no boundary, Dirichlet,Neumann, or Robin type.
-!    INTEGER(INTG), INTENT(IN) :: NodeIdx
-!    REAL(DP), INTENT(IN) :: VALUE(:) !<VALUE. The value of the boundary condition for the i'th dof to set
-!    INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
-!    TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
-!    !Local Variables
-!    TYPE(BoundaryConditionsValuesType), POINTER :: boundaryConditionsValues
-!    TYPE(RobinValuesType), POINTER :: robinValues
-!    TYPE(BoundaryConditionsDofType), POINTER :: dofType
-!    INTEGER(INTG) :: numberOfValues
-
-
-!    ENTERS("BoundaryConditions_ValuesSet",ERR,ERROR,*998)
-
-!    IF(ASSOCIATED(boundaryConditions)) THEN
-!      NULLIFY(boundaryConditionsValues)
-!      NULLIFY(robinValues)
-!      NULLIFY(dofType)
-
-!      boundaryConditionsValues=>boundaryConditions%boundaryConditionsValues(nodeIdx)
-!      boundaryConditionsValues%boundary = boundaryGeneralType
-!      boundaryConditionsValues%boundaryNode = .TRUE.
-
-!      dofType=>boundaryConditions%boundaryConditionsValues(nodeIdx)%dofType
-!      ALLOCATE(dofTYPE%values(size(VALUE,1)))
-!      dofType%rowBCtype = boundaryGeneralType
-!      dofType%values = VALUE
-
-
-!      SELECT CASE(boundaryGeneralType)
-!      CASE(NO_BOUNDARY)
-!        !DO NOTHING
-!      CASE(DIRICHLET_BOUNDARY_CONDITION)
-!        boundaryConditions%boundaryConditionsValues(nodeIdx)%dirichletValue = value(1)
-!      CASE(NEUMANN_BOUNDARY_CONDITION)
-!        boundaryConditions%boundaryConditionsValues(nodeIdx)%neumannValue = value(1)
-!      CASE(ROBIN_BOUNDARY_CONDITION)
-!        IF (SIZE(VALUE,1)==3) THEN
-!          robinValues=>boundaryConditions%boundaryConditionsValues(nodeIdx)%robinValues
-!          robinValues%U_Coefficient = VALUE(1)
-!          robinValues%DelUDeln_Coefficient=VALUE(2)
-!          robinValues%robinValue=VALUE(3)
-!        ELSE
-!          CALL FlagError("Robin BCs need 3 values to be assigned." ,ERR,ERROR,*998)
-!        END IF
-!      END SELECT
-!    ELSE
-!      CALL FlagError("boundaryConditions is not associated.",ERR,ERROR,*998)
-!    ENDIF
-
-
-
-!ALLOCATE(boundaryConditions%dofTypes%DOFs(numberOfvalues),STAT=ERR)
-
-
-
-!  TYPE BoundaryConditions_Dof2valueParam_map
-!    INTEGER(INTG) :: numberOfvalues
-!    INTEGER(INTG), ALLOCATABLE :: valuesNumber(:)
-!  END TYPE BoundaryConditions_Dof2valueParam_map
-
-!  TYPE BoundaryConditionsDofTypes
-!    INTEGER(INTG), ALLOCATABLE :: rowBCtypes(:)
-!    INTEGER(INTG) :: numberOfValues
-!    REAL(DP), ALLOCATABLE :: values(:)
-!    TYPE(BoundaryConditions_Dof2valueParam_map), ALLOCATABLE :: DOFs(:)
-!  END TYPE BoundaryConditionsDofTypes
-
-
-
-!    EXITS("BoundaryConditions_ValuesSet")
-!    RETURN
-!998 ERRORSEXITS("BoundaryConditions_ValuesSet",ERR,ERROR)
-!    RETURN 1
-!  END SUBROUTINE BoundaryConditions_ValuesSet
-
-  !
-  !================================================================================================================================
-  !
 !Elias
   !>Sets/changes the sparsity type for the Robin integration matrices
   SUBROUTINE BoundaryConditions_RobinSparsityTypeSet(boundaryConditions,sparsityType,err,error,*)
@@ -4510,6 +4356,7 @@ CONTAINS
         IF(err/=0) CALL FlagError("Could not allocate Robin Boundary Conditions",err,error,*998)
         boundaryConditionsRobin=>boundaryConditions%robinBoundaryConditions
         boundaryConditionsRobin%robinMatrixSparsity=BOUNDARY_CONDITION_SPARSE_MATRICES
+        boundaryConditionsRobin%updateMatrix=.TRUE.
         IF(ASSOCIATED(boundaryConditionsRobin)) THEN
           NULLIFY(boundaryConditionsRobin%robinMatrix)
 !          NULLIFY(boundaryConditionsRobin%pointValues)
@@ -5003,7 +4850,6 @@ CONTAINS
 
     !Argument variables
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER, INTENT(IN) :: rhsBoundaryConditions !<The boundary conditions for the right hand side field variable
-    TYPE(EquationsMatrixType), POINTER :: conductivityMatrix !<The conductivity matrix, which is the same as stiffness matrix.
     INTEGER(INTG), INTENT(OUT) :: err !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
 
@@ -5015,7 +4861,7 @@ CONTAINS
     INTEGER(INTG) :: faceNumber,lineNumber,domainIdx,domainNumber
     INTEGER(INTG) :: ms,os,nodeNumber,derivativeNumber,versionNumber
     LOGICAL :: dependentGeometry
-    REAL(DP) :: integratedValue,phim,phio,phin
+    REAL(DP) :: integratedValue,phim,phio,phin,JGW
     TYPE(Boundary_Conditions_Type), POINTER :: boundaryConditions !<The boundary conditions for the left hand side field variable
 !    TYPE(BoundaryConditionsNeumannType), POINTER :: neumannConditions
     TYPE(BoundaryConditionsRobinType), POINTER :: robinConditions !Elias
@@ -5050,315 +4896,311 @@ CONTAINS
       CALL FlagError("boundaryConditions is not associated.",err,error,*999)
     END IF
 
+
     !Check that Robin conditions are associated, otherwise do nothing
     IF(ASSOCIATED(robinConditions)) THEN
-      rhsVariable=>rhsBoundaryConditions%VARIABLE
-      IF(.NOT.ASSOCIATED(rhsVariable)) THEN
-        CALL FlagError("Field variable for RHS boundary conditions is not associated.",err,error,*999)
-      END IF
+      IF(robinConditions%updateMatrix) THEN
+        rhsVariable=>rhsBoundaryConditions%VARIABLE
+        IF(.NOT.ASSOCIATED(rhsVariable)) THEN
+          CALL FlagError("Field variable for RHS boundary conditions is not associated.",err,error,*999)
+        END IF
 
-      CALL Field_GeometricGeneralFieldGet(rhsVariable%field,geometricField,dependentGeometry,err,error,*999)
+        CALL Field_GeometricGeneralFieldGet(rhsVariable%field,geometricField,dependentGeometry,err,error,*999)
 
-      CALL DISTRIBUTED_MATRIX_ALL_VALUES_SET(robinConditions%robinMatrix,0.0_DP,err,error,*999)
+        CALL DISTRIBUTED_MATRIX_ALL_VALUES_SET(robinConditions%robinMatrix,0.0_DP,err,error,*999)
 
-      numberOfRobin=rhsBoundaryConditions%DOF_COUNTS(BOUNDARY_CONDITION_ROBIN)
-      myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
+        numberOfRobin=rhsBoundaryConditions%DOF_COUNTS(BOUNDARY_CONDITION_ROBIN)
+        myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
 
-      ! Initialise field interpolation parameters for the geometric field, which are required for the
-      ! face/line Jacobian and scale factors
-      CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(geometricField,interpolationParameters,err,error,*999)
-      CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(rhsVariable%field,scalingParameters,err,error,*999)
-      CALL FIELD_INTERPOLATED_POINTS_INITIALISE(interpolationParameters,interpolatedPoints,err,error,*999)
-      CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoints,interpolatedPointMetrics,err,error,*999)
+        ! Initialise field interpolation parameters for the geometric field, which are required for the
+        ! face/line Jacobian and scale factors
+        CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(geometricField,interpolationParameters,err,error,*999)
+        CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(rhsVariable%field,scalingParameters,err,error,*999)
+        CALL FIELD_INTERPOLATED_POINTS_INITIALISE(interpolationParameters,interpolatedPoints,err,error,*999)
+        CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoints,interpolatedPointMetrics,err,error,*999)
 
-      ! Loop over all Robin point DOFs, finding the boundary lines or faces they are on.
-      ! and integrating over them
-      DO RobinDofIdx=1,numberOfRobin
-        robinGlobalDof=robinConditions%setDofs(RobinDofIdx)
+        ! Loop over all Robin point DOFs, finding the boundary lines or faces they are on.
+        ! and integrating over them
+        DO RobinDofIdx=1,numberOfRobin
+          robinGlobalDof=robinConditions%setDofs(RobinDofIdx)
 
-        domainNumber=-1
-        DO domainIdx=1,rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%NUMBER_OF_DOMAINS !Elias */
-          IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainIdx)==myComputationalNodeNumber &
-            & .AND. (rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_TYPE(domainIdx)== &
-            & DOMAIN_LOCAL_BOUNDARY .OR. rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)% &
-            & LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_INTERNAL)) THEN
-            domainNumber=domainIdx
-          END IF
-        END DO  !Elias /*
-
-        IF(domainNumber/=-1) THEN !Elias
-
-!        IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(1)==myComputationalNodeNumber) THEN
-!          robinLocalDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_NUMBER(1)
-          IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainNumber)==myComputationalNodeNumber) THEN !Elias
-            robinLocalDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_NUMBER(domainNumber)
-            ! Get Robin DOF component and topology for that component
-            RobinDofNyy=rhsVariable%DOF_TO_PARAM_MAP%DOF_TYPE(2,robinLocalDof)
-            componentNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(4,RobinDofNyy)
-            topology=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%TOPOLOGY
-            IF(.NOT.ASSOCIATED(topology)) THEN
-              CALL FlagError("Field component topology is not associated.",err,error,*999)
+          domainNumber=-1
+          DO domainIdx=1,rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%NUMBER_OF_DOMAINS !Elias */
+            IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainIdx)==myComputationalNodeNumber &
+              & .AND. (rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_TYPE(domainIdx)== &
+              & DOMAIN_LOCAL_BOUNDARY .OR. rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)% &
+              & LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_INTERNAL)) THEN
+              domainNumber=domainIdx
             END IF
-            decomposition=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%DECOMPOSITION
-            IF(.NOT.ASSOCIATED(decomposition)) THEN
-              CALL FlagError("Field component decomposition is not associated.",err,error,*999)
-            END IF
-            SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%INTERPOLATION_TYPE)
-            CASE(FIELD_NODE_BASED_INTERPOLATION)
-              RobinNodeNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(3,RobinDofNyy)
-              SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%DOMAIN%NUMBER_OF_DIMENSIONS)
-              CASE(1)
-                CALL DISTRIBUTED_MATRIX_VALUES_SET(robinConditions%robinMatrix,robinLocalDof,RobinDofIdx, &
-                  & 1.0_DP,err,error,*999)
-              CASE(2)
-                IF(.NOT.decomposition%CALCULATE_LINES) THEN
-                  CALL FlagError("Decomposition does not have lines calculated.",err,error,*999)
-                END IF
-                lines=>topology%LINES
-                IF(.NOT.ASSOCIATED(lines)) THEN
-                  CALL FlagError("Mesh topology lines is not associated.",err,error,*999)
-                END IF
-                linesLoop: DO lineIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_LINES
-                  lineNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_LINES(lineIdx)
-                  line=>topology%lines%lines(lineNumber)
-                  IF(.NOT.line%BOUNDARY_LINE) &
-                    CYCLE linesLoop
-                  basis=>line%basis
-                  IF(.NOT.ASSOCIATED(basis)) THEN
-                    CALL FlagError("Line basis is not associated.",err,error,*999)
+          END DO  !Elias /*
+
+          IF(domainNumber/=-1) THEN !Elias
+
+  !        IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(1)==myComputationalNodeNumber) THEN
+  !          robinLocalDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_NUMBER(1)
+            IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainNumber)==myComputationalNodeNumber) THEN !Elias
+              robinLocalDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_NUMBER(domainNumber)
+              ! Get Robin DOF component and topology for that component
+              RobinDofNyy=rhsVariable%DOF_TO_PARAM_MAP%DOF_TYPE(2,robinLocalDof)
+              componentNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(4,RobinDofNyy)
+              topology=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%TOPOLOGY
+              IF(.NOT.ASSOCIATED(topology)) THEN
+                CALL FlagError("Field component topology is not associated.",err,error,*999)
+              END IF
+              decomposition=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%DECOMPOSITION
+              IF(.NOT.ASSOCIATED(decomposition)) THEN
+                CALL FlagError("Field component decomposition is not associated.",err,error,*999)
+              END IF
+              SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%INTERPOLATION_TYPE)
+              CASE(FIELD_NODE_BASED_INTERPOLATION)
+                RobinNodeNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(3,RobinDofNyy)
+                SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%DOMAIN%NUMBER_OF_DIMENSIONS)
+                CASE(1)
+                  CALL DISTRIBUTED_MATRIX_VALUES_SET(robinConditions%robinMatrix,robinLocalDof,RobinDofIdx, &
+                    & 1.0_DP,err,error,*999)
+                CASE(2)
+                  IF(.NOT.decomposition%CALCULATE_LINES) THEN
+                    CALL FlagError("Decomposition does not have lines calculated.",err,error,*999)
                   END IF
-                  RobinLocalNodeNumber=0
-                  RobinLocalDerivNumber=0
-                  ! Check all nodes in line to find the local numbers for the Robin DOF, and
-                  ! make sure we don't have an integrated_only condition set on the line
-                  DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
-                    nodeNumber=line%NODES_IN_LINE(nodeIdx)
-                    DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
-                      derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
-                      versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
-                      localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                        & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-                      globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
-                      IF(globalDof==robinGlobalDof) THEN
-                        RobinLocalNodeNumber=nodeIdx
-                        RobinLocalDerivNumber=derivIdx
-  !                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
-  !                      CYCLE linesLoop
-                      END IF
-                    END DO
-                  END DO
-                  IF(RobinLocalNodeNumber==0) THEN
-                    CALL FlagError("Could not find local Robin node and derivative numbers in line.",err,error,*999)
+                  lines=>topology%LINES
+                  IF(.NOT.ASSOCIATED(lines)) THEN
+                    CALL FlagError("Mesh topology lines is not associated.",err,error,*999)
                   END IF
-
-                  ! Now perform actual integration
-                  quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-                  IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-                    CALL FlagError("Line basis default quadrature scheme is not associated.",err,error,*999)
-                  END IF
-                  CALL FIELD_INTERPOLATION_PARAMETERS_LINE_GET(FIELD_VALUES_SET_TYPE,lineNumber, &
-                    & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                  IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
-                    CALL Field_InterpolationParametersScaleFactorsLineGet(lineNumber, &
-                      & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
-                  END IF
-
-                  DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
-                    nodeNumber=line%NODES_IN_LINE(nodeIdx)
-                    DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
-                      derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
-                      versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
-                      localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                        & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-
-                      ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-                      os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
-
-                      integratedValue=0.0_DP
-
-                      ! Loop over line gauss points, adding gauss weighted terms to the integral
-                      DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-                        CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-                          & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                        CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_LINE_TYPE, &
-                          & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
-
-                        !Get basis function values at guass points
-                        phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-                        phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
-
-                        !Add gauss point value to total line integral
-                        integratedValue=integratedValue+phim*phio* &
-                          & quadratureScheme%GAUSS_WEIGHTS(gaussIdx)* &
-                          & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian
+                  linesLoop: DO lineIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_LINES
+                    lineNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_LINES(lineIdx)
+                    line=>topology%lines%lines(lineNumber)
+                    IF(.NOT.line%BOUNDARY_LINE) &
+                      CYCLE linesLoop
+                    basis=>line%basis
+                    IF(.NOT.ASSOCIATED(basis)) THEN
+                      CALL FlagError("Line basis is not associated.",err,error,*999)
+                    END IF
+                    RobinLocalNodeNumber=0
+                    RobinLocalDerivNumber=0
+                    ! Check all nodes in line to find the local numbers for the Robin DOF, and
+                    ! make sure we don't have an integrated_only condition set on the line
+                    DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
+                      nodeNumber=line%NODES_IN_LINE(nodeIdx)
+                      DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
+                        derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
+                        versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
+                        localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                          & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                        globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
+                        IF(globalDof==robinGlobalDof) THEN
+                          RobinLocalNodeNumber=nodeIdx
+                          RobinLocalDerivNumber=derivIdx
+    !                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
+    !                      CYCLE linesLoop
+                        END IF
                       END DO
-
-                      ! Multiply by scale factors for dependent variable
-                      IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
-                        integratedValue=integratedValue* &
-                          & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
-                          & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
-                      END IF
-
-                      ! Add integral term to N matrix
-                      CALL DISTRIBUTED_MATRIX_VALUES_ADD(robinConditions%robinMatrix,localDof,RobinDofIdx, &
-                        & integratedValue,err,error,*999)
                     END DO
-                  END DO
-                END DO linesLoop
-              CASE(3)
-                IF(.NOT.decomposition%CALCULATE_FACES) THEN
-                  CALL FlagError("Decomposition does not have faces calculated.",err,error,*999)
-                END IF
-                faces=>topology%FACES
-                IF(.NOT.ASSOCIATED(faces)) THEN
-                  CALL FlagError("Mesh topology faces is not associated.",err,error,*999)
-                END IF
-                facesLoop: DO faceIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_FACES
-                  faceNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_FACES(faceIdx)
-                  face=>topology%FACES%FACES(faceNumber)
-                  IF(.NOT.face%BOUNDARY_FACE) &
-                    CYCLE facesLoop
-                  basis=>face%BASIS
-                  IF(.NOT.ASSOCIATED(basis)) THEN
-                    CALL FlagError("Line face is not associated.",err,error,*999)
+                    IF(RobinLocalNodeNumber==0) THEN
+                      CALL FlagError("Could not find local Robin node and derivative numbers in line.",err,error,*999)
+                    END IF
+
+                    ! Now perform actual integration
+                    quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+                    IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+                      CALL FlagError("Line basis default quadrature scheme is not associated.",err,error,*999)
+                    END IF
+                    CALL FIELD_INTERPOLATION_PARAMETERS_LINE_GET(FIELD_VALUES_SET_TYPE,lineNumber, &
+                      & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                    IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                      CALL Field_InterpolationParametersScaleFactorsLineGet(lineNumber, &
+                        & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+                    END IF
+
+                    ! Loop over line gauss points, adding gauss weighted terms to the integral
+                    DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+                      CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                        & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                      CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_LINE_TYPE, &
+                        & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+
+                      JGW=quadratureScheme%GAUSS_WEIGHTS(gaussIdx)*interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian
+
+                      DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
+                        nodeNumber=line%NODES_IN_LINE(nodeIdx)
+                        DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
+                          derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
+                          versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
+                          localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                            & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+
+                          ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                          os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
+
+                          !Get basis function values at guass points
+                          phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                          phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
+
+                          !Add gauss point value to total line integral
+                          integratedValue=phim*phio*JGW
+
+                          ! Multiply by scale factors for dependent variable
+                          IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                            integratedValue=integratedValue* &
+                              & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
+                              & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
+                          END IF
+
+                          ! Add integral term to N matrix
+                          CALL DISTRIBUTED_MATRIX_VALUES_ADD(robinConditions%robinMatrix,localDof,RobinDofIdx, &
+                            & integratedValue,err,error,*999)
+                        END DO
+                      END DO !nodeIdx
+                    END DO !gaussIdx
+                  END DO linesLoop
+                CASE(3)
+                  IF(.NOT.decomposition%CALCULATE_FACES) THEN
+                    CALL FlagError("Decomposition does not have faces calculated.",err,error,*999)
                   END IF
-                  RobinLocalNodeNumber=0
-                  RobinLocalDerivNumber=0
-                  ! Check all nodes in the face to find the local numbers for the Robin DOF, and
-                  ! make sure we don't have an integrated_only condition set on the face
-                  DO nodeIdx=1,basis%NUMBER_OF_NODES
-                    nodeNumber=face%NODES_IN_FACE(nodeIdx)
-                    DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-                      derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
-                      versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
-                      localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                        & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-                      globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
-                      IF(globalDof==robinGlobalDof) THEN
-                        RobinLocalNodeNumber=nodeIdx
-                        RobinLocalDerivNumber=derivIdx
-  !                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
-  !                      CYCLE facesLoop
-                      END IF
-                    END DO
-                  END DO
-                  IF(RobinLocalNodeNumber==0) THEN
-                    CALL FlagError("Could not find local Robin node and derivative numbers in line.",err,error,*999)
+                  faces=>topology%FACES
+                  IF(.NOT.ASSOCIATED(faces)) THEN
+                    CALL FlagError("Mesh topology faces is not associated.",err,error,*999)
                   END IF
-
-                  ! Now perform actual integration
-                  quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-                  IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-                    CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
-                  END IF
-                  CALL FIELD_INTERPOLATION_PARAMETERS_FACE_GET(FIELD_VALUES_SET_TYPE,faceNumber, &
-                    & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                  IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
-                    CALL Field_InterpolationParametersScaleFactorsFaceGet(faceNumber, &
-                      & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
-                  END IF
-
-
-                  DO nodeIdx=1,basis%NUMBER_OF_NODES
-                    nodeNumber=face%NODES_IN_FACE(nodeIdx)
-                    DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-                      derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
-                      versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
-                      localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                        & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-
-                      ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-                      os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
-
-                      integratedValue=0.0_DP
-                      ! Loop over line gauss points, adding gauss weighted terms to the integral
-                      DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-                        CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-                          & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                        CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_AREA_TYPE, &
-                          & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
-
-                        !Get basis function values at guass points
-                        phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-                        phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
-
-                        !Add gauss point value to total face integral
-                        ! int(qwd\GAMMA) which is Sigma(ng=1:4 for face) phio(ng)*phim(ng)*J*W(ng)
-                        integratedValue=integratedValue+phim*phio* &
-                          & quadratureScheme%GAUSS_WEIGHTS(gaussIdx)* &
-                          & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian
-
-
+                  facesLoop: DO faceIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_FACES
+                    faceNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_FACES(faceIdx)
+                    face=>topology%FACES%FACES(faceNumber)
+                    IF(.NOT.face%BOUNDARY_FACE) &
+                      CYCLE facesLoop
+                    basis=>face%BASIS
+                    IF(.NOT.ASSOCIATED(basis)) THEN
+                      CALL FlagError("Line face is not associated.",err,error,*999)
+                    END IF
+                    RobinLocalNodeNumber=0
+                    RobinLocalDerivNumber=0
+                    ! Check all nodes in the face to find the local numbers for the Robin DOF, and
+                    ! make sure we don't have an integrated_only condition set on the face
+                    DO nodeIdx=1,basis%NUMBER_OF_NODES
+                      nodeNumber=face%NODES_IN_FACE(nodeIdx)
+                      DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+                        derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
+                        versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
+                        localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                          & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                        globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
+                        IF(globalDof==robinGlobalDof) THEN
+                          RobinLocalNodeNumber=nodeIdx
+                          RobinLocalDerivNumber=derivIdx
+    !                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
+    !                      CYCLE facesLoop
+                        END IF
                       END DO
-
-                      ! Multiply by scale factors.
-                      IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
-                        integratedValue=integratedValue* &
-                          & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
-                          & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
-                      END IF
-
-                      ! Add integral term to R matrix
-                      CALL DistributedMatrix_ValuesAdd(robinConditions%robinMatrix,localDof,RobinDofIdx, &
-                        & integratedValue,err,error,*999)
-
                     END DO
-                  END DO !nodeIdxm
-                END DO facesLoop
+                    IF(RobinLocalNodeNumber==0) THEN
+                      CALL FlagError("Could not find local Robin node and derivative numbers in face.",err,error,*999)
+                    END IF
+
+                    ! Now perform actual integration
+                    quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+                    IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+                      CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
+                    END IF
+                    CALL FIELD_INTERPOLATION_PARAMETERS_FACE_GET(FIELD_VALUES_SET_TYPE,faceNumber, &
+                      & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                    IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                      CALL Field_InterpolationParametersScaleFactorsFaceGet(faceNumber, &
+                        & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+                    END IF
+
+
+                    ! Loop over face gauss points, adding gauss weighted terms to the integral
+                    DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+                      CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                        & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                      CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_AREA_TYPE, &
+                        & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+
+                      JGW= quadratureScheme%GAUSS_WEIGHTS(gaussIdx)*interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian
+
+                      DO nodeIdx=1,basis%NUMBER_OF_NODES
+                        nodeNumber=face%NODES_IN_FACE(nodeIdx)
+                        DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+                          derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
+                          versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
+                          localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                            & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+
+                          ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                          os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
+                          !Get basis function values at guass points
+                          phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                          phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
+
+                          !Add gauss point value to total face integral
+                          ! int(qwd\GAMMA) which is Sigma(ng=1:4 for face) phio(ng)*phim(ng)*J*W(ng)
+                          integratedValue=phim*phio*JGW
+
+                          ! Multiply by scale factors.
+                          IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                            integratedValue=integratedValue* &
+                              & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
+                              & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
+                          END IF
+
+                          ! Add integral term to R matrix
+                          CALL DistributedMatrix_ValuesAdd(robinConditions%robinMatrix,localDof,RobinDofIdx, &
+                            & integratedValue,err,error,*999)
+                        END DO
+                      END DO !nodeIdxm
+                    END DO !gaussIdx
+                  END DO facesLoop
+                CASE DEFAULT
+                  CALL FlagError("The dimension is invalid for point Robin conditions",err,error,*999)
+                END SELECT
+              CASE(FIELD_ELEMENT_BASED_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE(FIELD_CONSTANT_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE(FIELD_GRID_POINT_BASED_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE(FIELD_GAUSS_POINT_BASED_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
               CASE DEFAULT
-                CALL FlagError("The dimension is invalid for point Robin conditions",err,error,*999)
+                CALL FlagError("The interpolation type of "// &
+                  & TRIM(NUMBER_TO_VSTRING(rhsVariable%COMPONENTS(componentNumber) &
+                  & %INTERPOLATION_TYPE,"*",ERR,ERROR))//" is invalid for component number "// &
+                  & TRIM(NUMBER_TO_VSTRING(componentNumber,"*",ERR,ERROR))//".", &
+                  & err,error,*999)
               END SELECT
-            CASE(FIELD_ELEMENT_BASED_INTERPOLATION)
-              CALL FlagError("Not implemented.",err,error,*999)
-            CASE(FIELD_CONSTANT_INTERPOLATION)
-              CALL FlagError("Not implemented.",err,error,*999)
-            CASE(FIELD_GRID_POINT_BASED_INTERPOLATION)
-              CALL FlagError("Not implemented.",err,error,*999)
-            CASE(FIELD_GAUSS_POINT_BASED_INTERPOLATION)
-              CALL FlagError("Not implemented.",err,error,*999)
-            CASE DEFAULT
-              CALL FlagError("The interpolation type of "// &
-                & TRIM(NUMBER_TO_VSTRING(rhsVariable%COMPONENTS(componentNumber) &
-                & %INTERPOLATION_TYPE,"*",ERR,ERROR))//" is invalid for component number "// &
-                & TRIM(NUMBER_TO_VSTRING(componentNumber,"*",ERR,ERROR))//".", &
-                & err,error,*999)
-            END SELECT
+            END IF
           END IF
+        END DO
+
+        CALL DISTRIBUTED_MATRIX_UPDATE_START(robinConditions%robinMatrix,err,error,*999)
+        CALL DISTRIBUTED_MATRIX_UPDATE_FINISH(robinConditions%robinMatrix,err,error,*999)
+
+        CALL FIELD_PARAMETER_SET_VECTOR_GET(rhsVariable%field,rhsVariable%variable_type,FIELD_INTEGRATED_ROBIN_SET_TYPE, &
+          & integratedValues,err,error,*999)
+        CALL DISTRIBUTED_VECTOR_ALL_VALUES_SET(integratedValues,0.0_DP,err,error,*999)
+        ! Perform matrix multiplication, f = R q_h, to calculate force vector from integration matrix and point values
+        CALL DISTRIBUTED_MATRIX_BY_VECTOR_ADD(DISTRIBUTED_MATRIX_VECTOR_NO_GHOSTS_TYPE,1.0_DP, &
+          & robinConditions%robinMatrix,robinConditions%heatFlux,integratedValues, &
+          & err,error,*999)
+
+        CALL FIELD_PARAMETER_SET_UPDATE_START(rhsVariable%FIELD,rhsVariable%VARIABLE_TYPE,FIELD_INTEGRATED_ROBIN_SET_TYPE, &
+          & err,error,*999)
+        IF(DIAGNOSTICS1) THEN
+          IF(dependentGeometry) THEN
+            CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Using dependent field geometry",err,error,*999)
+          ELSE
+            CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Using undeformed geometry",err,error,*999)
+          END IF
+          CALL WRITE_STRING_VECTOR(DIAGNOSTIC_OUTPUT_TYPE,1,1,numberOfRobin,6,6,robinConditions%setDofs, &
+            & '("  setDofs:",6(X,I8))', '(10X,6(X,I8))',err,error,*999)
+          CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Robin heat flux",err,error,*999)
+          CALL DISTRIBUTED_VECTOR_OUTPUT(DIAGNOSTIC_OUTPUT_TYPE,robinConditions%heatFlux,err,error,*999)
+          CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Robin integration matrix",err,error,*999)
+          CALL DISTRIBUTED_MATRIX_OUTPUT(DIAGNOSTIC_OUTPUT_TYPE,robinConditions%robinMatrix,err,error,*999)
+          CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Integrated values",err,error,*999)
+          CALL DISTRIBUTED_VECTOR_OUTPUT(DIAGNOSTIC_OUTPUT_TYPE,integratedValues,err,error,*999)
         END IF
-      END DO
+        CALL FIELD_PARAMETER_SET_UPDATE_FINISH(rhsVariable%FIELD,rhsVariable%VARIABLE_TYPE,FIELD_INTEGRATED_ROBIN_SET_TYPE, &
+          & err,error,*999)
 
-      CALL DISTRIBUTED_MATRIX_UPDATE_START(robinConditions%robinMatrix,err,error,*999)
-      CALL DISTRIBUTED_MATRIX_UPDATE_FINISH(robinConditions%robinMatrix,err,error,*999)
-
-      CALL FIELD_PARAMETER_SET_VECTOR_GET(rhsVariable%field,rhsVariable%variable_type,FIELD_INTEGRATED_ROBIN_SET_TYPE, &
-        & integratedValues,err,error,*999)
-      CALL DISTRIBUTED_VECTOR_ALL_VALUES_SET(integratedValues,0.0_DP,err,error,*999)
-      ! Perform matrix multiplication, f = R q_h, to calculate force vector from integration matrix and point values
-      CALL DISTRIBUTED_MATRIX_BY_VECTOR_ADD(DISTRIBUTED_MATRIX_VECTOR_NO_GHOSTS_TYPE,1.0_DP, &
-        & robinConditions%robinMatrix,robinConditions%heatFlux,integratedValues, &
-        & err,error,*999)
-
-      CALL FIELD_PARAMETER_SET_UPDATE_START(rhsVariable%FIELD,rhsVariable%VARIABLE_TYPE,FIELD_INTEGRATED_ROBIN_SET_TYPE, &
-        & err,error,*999)
-      IF(DIAGNOSTICS1) THEN
-        IF(dependentGeometry) THEN
-          CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Using dependent field geometry",err,error,*999)
-        ELSE
-          CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Using undeformed geometry",err,error,*999)
-        END IF
-        CALL WRITE_STRING_VECTOR(DIAGNOSTIC_OUTPUT_TYPE,1,1,numberOfRobin,6,6,robinConditions%setDofs, &
-          & '("  setDofs:",6(X,I8))', '(10X,6(X,I8))',err,error,*999)
-        CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Robin heat flux",err,error,*999)
-        CALL DISTRIBUTED_VECTOR_OUTPUT(DIAGNOSTIC_OUTPUT_TYPE,robinConditions%heatFlux,err,error,*999)
-        CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Robin integration matrix",err,error,*999)
-        CALL DISTRIBUTED_MATRIX_OUTPUT(DIAGNOSTIC_OUTPUT_TYPE,robinConditions%robinMatrix,err,error,*999)
-        CALL WRITE_STRING(DIAGNOSTIC_OUTPUT_TYPE,"  Integrated values",err,error,*999)
-        CALL DISTRIBUTED_VECTOR_OUTPUT(DIAGNOSTIC_OUTPUT_TYPE,integratedValues,err,error,*999)
-      END IF
-      CALL FIELD_PARAMETER_SET_UPDATE_FINISH(rhsVariable%FIELD,rhsVariable%VARIABLE_TYPE,FIELD_INTEGRATED_ROBIN_SET_TYPE, &
-        & err,error,*999)
-
+      END IF !updateMatrix
     END IF !Robin conditions associated
 
     EXITS("BoundaryConditions_RobinIntegrate")
@@ -5372,11 +5214,11 @@ CONTAINS
   !
 
   !>Calculates integrated Robin condition values for a boundary conditions variable.
-  SUBROUTINE BoundaryConditions_RobinDynamicIntegrate(rhsBoundaryConditions,conductivityMatrix,err,error,*)
+  SUBROUTINE BoundaryConditions_RobinDynamicIntegrate(rhsBoundaryConditions,stiffnessMatrix,err,error,*)
 
     !Argument variables
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER, INTENT(IN) :: rhsBoundaryConditions !<The boundary conditions for the right hand side field variable
-    TYPE(EquationsMatrixType), POINTER :: conductivityMatrix !<The conductivity matrix, which is the same as stiffness matrix.
+    TYPE(EquationsMatrixType), POINTER :: stiffnessMatrix !<The stiffness matrix, which is the same as stiffness matrix.
     INTEGER(INTG), INTENT(OUT) :: err !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
 
@@ -5388,7 +5230,7 @@ CONTAINS
     INTEGER(INTG) :: faceNumber,lineNumber,domainIdx,domainNumber
     INTEGER(INTG) :: ms,os,ns,nodeNumber,derivativeNumber,versionNumber
     LOGICAL :: dependentGeometry
-    REAL(DP) :: integratedValue,integratedValueDynamic,phim,phio,phin,h
+    REAL(DP) :: integratedValue,integratedValueDynamic,phim,phio,phin,h,JGW
     TYPE(Boundary_Conditions_Type), POINTER :: boundaryConditions !<The boundary conditions for the left hand side field variable
 !    TYPE(BoundaryConditionsNeumannType), POINTER :: neumannConditions
     TYPE(BoundaryConditionsRobinType), POINTER :: robinConditions !Elias.
@@ -5415,328 +5257,324 @@ CONTAINS
     NULLIFY(interpolatedPointMetrics)
     NULLIFY(integratedValues)
 
-!    neumannConditions=>rhsBoundaryConditions%neumannBoundaryConditions
-    boundaryConditions=>rhsBoundaryConditions%BOUNDARY_CONDITIONS
-    IF(ASSOCIATED(boundaryConditions)) THEN
-        robinConditions=>boundaryConditions%robinBoundaryConditions
-    ELSE
-      CALL FlagError("boundaryConditions is not associated.",err,error,*999)
-    END IF
+    IF(stiffnessMatrix%updateMatrix) THEN
 
-    !Check that Robin conditions are associated, otherwise do nothing
-    IF(ASSOCIATED(robinConditions)) THEN
-      rhsVariable=>rhsBoundaryConditions%VARIABLE
-      IF(.NOT.ASSOCIATED(rhsVariable)) THEN
-        CALL FlagError("Field variable for RHS boundary conditions is not associated.",err,error,*999)
+      boundaryConditions=>rhsBoundaryConditions%BOUNDARY_CONDITIONS
+      IF(ASSOCIATED(boundaryConditions)) THEN
+          robinConditions=>boundaryConditions%robinBoundaryConditions
+      ELSE
+        CALL FlagError("boundaryConditions is not associated.",err,error,*999)
       END IF
 
-      CALL Field_GeometricGeneralFieldGet(rhsVariable%field,geometricField,dependentGeometry,err,error,*999)
-
-      CALL DISTRIBUTED_MATRIX_ALL_VALUES_SET(robinConditions%robinMatrix,0.0_DP,err,error,*999)
-
-      numberOfRobin=rhsBoundaryConditions%DOF_COUNTS(BOUNDARY_CONDITION_ROBIN)
-      myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
-
-      ! Initialise field interpolation parameters for the geometric field, which are required for the
-      ! face/line Jacobian and scale factors
-      CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(geometricField,interpolationParameters,err,error,*999)
-      CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(rhsVariable%field,scalingParameters,err,error,*999)
-      CALL FIELD_INTERPOLATED_POINTS_INITIALISE(interpolationParameters,interpolatedPoints,err,error,*999)
-      CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoints,interpolatedPointMetrics,err,error,*999)
-
-      ! Loop over all Robin point DOFs, finding the boundary lines or faces they are on
-      ! and integrating over them
-      DO robinDofIdx=1,numberOfRobin
-        robinGlobalDof=robinConditions%setDofs(robinDofIdx)
-
-        domainNumber=-1
-        DO domainIdx=1,rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%NUMBER_OF_DOMAINS !Elias */
-          IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainIdx)==myComputationalNodeNumber &
-            & .AND. (rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_TYPE(domainIdx)== &
-            & DOMAIN_LOCAL_BOUNDARY .OR. rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)% &
-            & LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_INTERNAL)) THEN
-            domainNumber=domainIdx
-          END IF
-        END DO  !Elias /*
-
-        IF(domainNumber/=-1) THEN !Elias
-
-!        IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(1)==myComputationalNodeNumber) THEN
-!          robinLocalDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_NUMBER(1)
-          IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainNumber)==myComputationalNodeNumber) THEN !Elias
-            robinLocalDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_NUMBER(domainNumber)
-            ! Get Robin DOF component and topology for that component
-            RobinDofNyy=rhsVariable%DOF_TO_PARAM_MAP%DOF_TYPE(2,robinLocalDof)
-            componentNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(4,RobinDofNyy)
-            topology=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%TOPOLOGY
-
-            !Get convection heat transfer coefficient.
-            robinLocalDofIdx= &
-              & robinConditions%convectionCoeff%domainmapping%global_to_local_map(robinDofIdx)%local_number(domainNumber)
-
-            CALL DistributedVector_ValuesGet(robinConditions%convectionCoeff,robinLocalDofIdx, &
-              & h,err,error,*999)
-
-            IF(.NOT.ASSOCIATED(topology)) THEN
-              CALL FlagError("Field component topology is not associated.",err,error,*999)
-            END IF
-            decomposition=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%DECOMPOSITION
-            IF(.NOT.ASSOCIATED(decomposition)) THEN
-              CALL FlagError("Field component decomposition is not associated.",err,error,*999)
-            END IF
-            SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%INTERPOLATION_TYPE)
-            CASE(FIELD_NODE_BASED_INTERPOLATION)
-              RobinNodeNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(3,RobinDofNyy)
-              SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%DOMAIN%NUMBER_OF_DIMENSIONS)
-              CASE(1)
-                CALL DistributedMatrix_ValuesAdd(conductivityMatrix%matrix,robinLocalDof,robinGlobalDof, &
-                  & h,err,error,*999)
-              CASE(2)
-                IF(.NOT.decomposition%CALCULATE_LINES) THEN
-                  CALL FlagError("Decomposition does not have lines calculated.",err,error,*999)
-                END IF
-                lines=>topology%LINES
-                IF(.NOT.ASSOCIATED(lines)) THEN
-                  CALL FlagError("Mesh topology lines is not associated.",err,error,*999)
-                END IF
-                linesLoop: DO lineIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_LINES
-                  lineNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_LINES(lineIdx)
-                  line=>topology%lines%lines(lineNumber)
-                  IF(.NOT.line%BOUNDARY_LINE) &
-                    CYCLE linesLoop
-                  basis=>line%basis
-                  IF(.NOT.ASSOCIATED(basis)) THEN
-                    CALL FlagError("Line basis is not associated.",err,error,*999)
-                  END IF
-                  RobinLocalNodeNumber=0
-                  RobinLocalDerivNumber=0
-                  ! Check all nodes in line to find the local numbers for the Robin DOF, and
-                  ! make sure we don't have an integrated_only condition set on the line
-                  DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
-                    nodeNumber=line%NODES_IN_LINE(nodeIdx)
-                    DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
-                      derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
-                      versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
-                      localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                        & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-                      globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
-                      IF(globalDof==robinGlobalDof) THEN
-                        RobinLocalNodeNumber=nodeIdx
-                        RobinLocalDerivNumber=derivIdx
-  !                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
-  !                      CYCLE linesLoop
-                      END IF
-                    END DO
-                  END DO
-                  IF(RobinLocalNodeNumber==0) THEN
-                    CALL FlagError("Could not find local Robin node and derivative numbers in line.",err,error,*999)
-                  END IF
-
-                  ! Now perform actual integration
-                  quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-                  IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-                    CALL FlagError("Line basis default quadrature scheme is not associated.",err,error,*999)
-                  END IF
-                  CALL FIELD_INTERPOLATION_PARAMETERS_LINE_GET(FIELD_VALUES_SET_TYPE,lineNumber, &
-                    & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                  IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
-                    CALL Field_InterpolationParametersScaleFactorsLineGet(lineNumber, &
-                      & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
-                  END IF
-
-                  DO nodeIdxn=1,basis%NUMBER_OF_NODES
-                    nodeNumber=line%NODES_IN_LINE(nodeIdxn)
-                    DO derivIdxn=1,basis%NUMBER_OF_DERIVATIVES(nodeIdxn)
-                      derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdxn,nodeIdxn)
-                      versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdxn,nodeIdxn)
-                      localDofN=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                        & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-                      globalDofN=rhsVariable%DOMAIN_MAPPING%local_to_global_map(localDofN)
-                      DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
-                        nodeNumber=line%NODES_IN_LINE(nodeIdx)
-                        DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
-                          derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
-                          versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
-                          localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                            & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-
-                          ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-                          os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
-                          ns=basis%ELEMENT_PARAMETER_INDEX(derivIdxn,nodeIdxn)
-
-                          integratedValueDynamic=0.0_DP
-                          ! Loop over line gauss points, adding gauss weighted terms to the integral
-                          DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-                            CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-                              & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                            CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_LINE_TYPE, &
-                              & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
-
-                            !Get basis function values at guass points
-                            phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-                            phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
-                            phin=quadratureScheme%GAUSS_BASIS_FNS(ns,NO_PART_DERIV,gaussIdx)
-
-                            !Add gauss point value to total line integral
-                            !int(-huwd\Gamma)=Sigma_{ng=1}^gaussPoints -ho phio phin phim J W
-                            integratedValueDynamic=integratedValueDynamic+h*phio*phim*phin* &
-                              & quadratureScheme%GAUSS_WEIGHTS(gaussIdx)* &
-                              & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian !Elias1
-
-                          END DO
-
-                          ! Multiply by scale factors for dependent variable
-                          IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
-                            integratedValueDynamic=integratedValueDynamic* &
-                              & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
-                              & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
-                          END IF
-
-                          ! Add the value directly into the conductivity matrix i.e. K in Cu'+Ku-f=0. K=K_e+K_h
-                          CALL DistributedMatrix_ValuesAdd(conductivityMatrix%matrix,localDof,globalDofN, &
-                            & integratedValueDynamic,err,error,*999)
-                        END DO
-                      END DO
-                    END DO ! driveIdxn
-                  END DO !nodeIdxn
-                END DO linesLoop
-              CASE(3)
-                IF(.NOT.decomposition%CALCULATE_FACES) THEN
-                  CALL FlagError("Decomposition does not have faces calculated.",err,error,*999)
-                END IF
-                faces=>topology%FACES
-                IF(.NOT.ASSOCIATED(faces)) THEN
-                  CALL FlagError("Mesh topology faces is not associated.",err,error,*999)
-                END IF
-                facesLoop: DO faceIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_FACES
-                  faceNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_FACES(faceIdx)
-                  face=>topology%FACES%FACES(faceNumber)
-                  IF(.NOT.face%BOUNDARY_FACE) &
-                    CYCLE facesLoop
-                  basis=>face%BASIS
-                  IF(.NOT.ASSOCIATED(basis)) THEN
-                    CALL FlagError("Line face is not associated.",err,error,*999)
-                  END IF
-                  RobinLocalNodeNumber=0
-                  RobinLocalDerivNumber=0
-                  ! Check all nodes in the face to find the local numbers for the Robin DOF, and
-                  ! make sure we don't have an integrated_only condition set on the face
-                  DO nodeIdx=1,basis%NUMBER_OF_NODES
-                    nodeNumber=face%NODES_IN_FACE(nodeIdx)
-                    DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-                      derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
-                      versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
-                      localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                        & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-                      globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
-                      IF(globalDof==robinGlobalDof) THEN
-                        RobinLocalNodeNumber=nodeIdx
-                        RobinLocalDerivNumber=derivIdx
-  !                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
-  !                      CYCLE facesLoop
-                      END IF
-                    END DO
-                  END DO
-                  IF(RobinLocalNodeNumber==0) THEN
-                    CALL FlagError("Could not find local Robin node and derivative numbers in line.",err,error,*999)
-                  END IF
-
-                  ! Now perform actual integration
-                  quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
-                  IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
-                    CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
-                  END IF
-                  CALL FIELD_INTERPOLATION_PARAMETERS_FACE_GET(FIELD_VALUES_SET_TYPE,faceNumber, &
-                    & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                  IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
-                    CALL Field_InterpolationParametersScaleFactorsFaceGet(faceNumber, &
-                      & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
-                  END IF
-
-                  DO nodeIdxn=1,basis%NUMBER_OF_NODES
-                    nodeNumber=face%NODES_IN_FACE(nodeIdxn)
-                    DO derivIdxn=1,basis%NUMBER_OF_DERIVATIVES(nodeIdxn)
-                      derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdxn,nodeIdxn)
-                      versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdxn,nodeIdxn)
-                      localDofN=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                        & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-                      globalDofN=rhsVariable%DOMAIN_MAPPING%local_to_global_map(localDofN)
-                      DO nodeIdx=1,basis%NUMBER_OF_NODES
-                        nodeNumber=face%NODES_IN_FACE(nodeIdx)
-                        DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
-                          derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
-                          versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
-                          localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
-                            & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
-
-                          ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
-                          os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
-                          ns=basis%ELEMENT_PARAMETER_INDEX(derivIdxn,nodeIdxn)
-
-                          integratedValueDynamic=0.0_DP
-                          ! Loop over line gauss points, adding gauss weighted terms to the integral
-                          DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
-                            CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
-                              & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
-                            CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_AREA_TYPE, &
-                              & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
-
-                            !Get basis function values at guass points
-                            phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
-                            phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
-                            phin=quadratureScheme%GAUSS_BASIS_FNS(ns,NO_PART_DERIV,gaussIdx)
-
-
-                            !int(-huwd\Gamma)=Sigma_{ng=1}^gaussPoints +ho phio phin phim J W
-                            integratedValueDynamic=integratedValueDynamic+h*phio*phim*phin* &
-                              & quadratureScheme%GAUSS_WEIGHTS(gaussIdx)* &
-                              & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian !Elias1
-
-
-                          END DO
-
-                          ! fMultiply by scale factors.
-                          IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
-                            integratedValueDynamic=integratedValueDynamic* &
-                              & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
-                              & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
-                          END IF
-
-                          ! Add the value directly into the conductivity matrix i.e. K in Cu'+Ku-f=0. K=K_e+K_h
-                          CALL DistributedMatrix_ValuesAdd(conductivityMatrix%matrix,localDof,globalDofN, &
-                            & integratedValueDynamic,err,error,*999)
-
-                        END DO
-                      END DO !nodeIdxm
-                    END DO ! driveIdxn
-                  END DO !nodeIdxn
-                END DO facesLoop
-              CASE DEFAULT
-                CALL FlagError("The dimension is invalid for point Robin conditions",err,error,*999)
-              END SELECT
-            CASE(FIELD_ELEMENT_BASED_INTERPOLATION)
-              CALL FlagError("Not implemented.",err,error,*999)
-            CASE(FIELD_CONSTANT_INTERPOLATION)
-              CALL FlagError("Not implemented.",err,error,*999)
-            CASE(FIELD_GRID_POINT_BASED_INTERPOLATION)
-              CALL FlagError("Not implemented.",err,error,*999)
-            CASE(FIELD_GAUSS_POINT_BASED_INTERPOLATION)
-              CALL FlagError("Not implemented.",err,error,*999)
-            CASE DEFAULT
-              CALL FlagError("The interpolation type of "// &
-                & TRIM(NUMBER_TO_VSTRING(rhsVariable%COMPONENTS(componentNumber) &
-                & %INTERPOLATION_TYPE,"*",ERR,ERROR))//" is invalid for component number "// &
-                & TRIM(NUMBER_TO_VSTRING(componentNumber,"*",ERR,ERROR))//".", &
-                & err,error,*999)
-            END SELECT
-          END IF
+      !Check that Robin conditions are associated, otherwise do nothing
+      IF(ASSOCIATED(robinConditions)) THEN
+        rhsVariable=>rhsBoundaryConditions%VARIABLE
+        IF(.NOT.ASSOCIATED(rhsVariable)) THEN
+          CALL FlagError("Field variable for RHS boundary conditions is not associated.",err,error,*999)
         END IF
-      END DO
 
-      CALL DISTRIBUTED_MATRIX_UPDATE_START(conductivityMatrix%matrix,err,error,*999)
-      CALL DISTRIBUTED_MATRIX_UPDATE_FINISH(conductivityMatrix%matrix,err,error,*999)
+        CALL Field_GeometricGeneralFieldGet(rhsVariable%field,geometricField,dependentGeometry,err,error,*999)
 
-    END IF !Robin conditions associated
+        ! CALL DISTRIBUTED_MATRIX_ALL_VALUES_SET(robinConditions%robinMatrix,0.0_DP,err,error,*999)
+
+        numberOfRobin=rhsBoundaryConditions%DOF_COUNTS(BOUNDARY_CONDITION_ROBIN)
+        myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
+
+        ! Initialise field interpolation parameters for the geometric field, which are required for the
+        ! face/line Jacobian and scale factors
+        CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(geometricField,interpolationParameters,err,error,*999)
+        CALL FIELD_INTERPOLATION_PARAMETERS_INITIALISE(rhsVariable%field,scalingParameters,err,error,*999)
+        CALL FIELD_INTERPOLATED_POINTS_INITIALISE(interpolationParameters,interpolatedPoints,err,error,*999)
+        CALL Field_InterpolatedPointsMetricsInitialise(interpolatedPoints,interpolatedPointMetrics,err,error,*999)
+
+        ! Loop over all Robin point DOFs, finding the boundary lines or faces they are on
+        ! and integrating over them
+        DO robinDofIdx=1,numberOfRobin
+          robinGlobalDof=robinConditions%setDofs(robinDofIdx)
+
+          domainNumber=-1
+          DO domainIdx=1,rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%NUMBER_OF_DOMAINS !Elias */
+            IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainIdx)==myComputationalNodeNumber &
+              & .AND. (rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_TYPE(domainIdx)== &
+              & DOMAIN_LOCAL_BOUNDARY .OR. rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)% &
+              & LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_INTERNAL)) THEN
+              domainNumber=domainIdx
+            END IF
+          END DO  !Elias /*
+
+          IF(domainNumber/=-1) THEN !Elias
+
+  !        IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(1)==myComputationalNodeNumber) THEN
+  !          robinLocalDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_NUMBER(1)
+            IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainNumber)==myComputationalNodeNumber) THEN !Elias
+              robinLocalDof=rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_NUMBER(domainNumber)
+              ! Get Robin DOF component and topology for that component
+              RobinDofNyy=rhsVariable%DOF_TO_PARAM_MAP%DOF_TYPE(2,robinLocalDof)
+              componentNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(4,RobinDofNyy)
+              topology=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%TOPOLOGY
+
+              !Get convection heat transfer coefficient.
+              robinLocalDofIdx= &
+                & robinConditions%convectionCoeff%domainmapping%global_to_local_map(robinDofIdx)%local_number(domainNumber)
+
+              CALL DistributedVector_ValuesGet(robinConditions%convectionCoeff,robinLocalDofIdx, &
+                & h,err,error,*999)
+
+              IF(.NOT.ASSOCIATED(topology)) THEN
+                CALL FlagError("Field component topology is not associated.",err,error,*999)
+              END IF
+              decomposition=>rhsVariable%COMPONENTS(componentNumber)%DOMAIN%DECOMPOSITION
+              IF(.NOT.ASSOCIATED(decomposition)) THEN
+                CALL FlagError("Field component decomposition is not associated.",err,error,*999)
+              END IF
+              SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%INTERPOLATION_TYPE)
+              CASE(FIELD_NODE_BASED_INTERPOLATION)
+                RobinNodeNumber=rhsVariable%DOF_TO_PARAM_MAP%NODE_DOF2PARAM_MAP(3,RobinDofNyy)
+                SELECT CASE(rhsVariable%COMPONENTS(componentNumber)%DOMAIN%NUMBER_OF_DIMENSIONS)
+                CASE(1)
+                  CALL DistributedMatrix_ValuesAdd(stiffnessMatrix%matrix,robinLocalDof,robinGlobalDof, &
+                    & h,err,error,*999)
+                CASE(2)
+                  IF(.NOT.decomposition%CALCULATE_LINES) THEN
+                    CALL FlagError("Decomposition does not have lines calculated.",err,error,*999)
+                  END IF
+                  lines=>topology%LINES
+                  IF(.NOT.ASSOCIATED(lines)) THEN
+                    CALL FlagError("Mesh topology lines is not associated.",err,error,*999)
+                  END IF
+                  linesLoop: DO lineIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_LINES
+                    lineNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_LINES(lineIdx)
+                    line=>topology%lines%lines(lineNumber)
+                    IF(.NOT.line%BOUNDARY_LINE) &
+                      CYCLE linesLoop
+                    basis=>line%basis
+                    IF(.NOT.ASSOCIATED(basis)) THEN
+                      CALL FlagError("Line basis is not associated.",err,error,*999)
+                    END IF
+                    RobinLocalNodeNumber=0
+                    RobinLocalDerivNumber=0
+                    ! Check all nodes in line to find the local numbers for the Robin DOF, and
+                    ! make sure we don't have an integrated_only condition set on the line
+                    DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
+                      nodeNumber=line%NODES_IN_LINE(nodeIdx)
+                      DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
+                        derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
+                        versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
+                        localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                          & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                        globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
+                        IF(globalDof==robinGlobalDof) THEN
+                          RobinLocalNodeNumber=nodeIdx
+                          RobinLocalDerivNumber=derivIdx
+    !                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
+    !                      CYCLE linesLoop
+                        END IF
+                      END DO
+                    END DO
+                    IF(RobinLocalNodeNumber==0) THEN
+                      CALL FlagError("Could not find local Robin node and derivative numbers in line.",err,error,*999)
+                    END IF
+
+                    ! Now perform actual integration
+                    quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+                    IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+                      CALL FlagError("Line basis default quadrature scheme is not associated.",err,error,*999)
+                    END IF
+                    CALL FIELD_INTERPOLATION_PARAMETERS_LINE_GET(FIELD_VALUES_SET_TYPE,lineNumber, &
+                      & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                    IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                      CALL Field_InterpolationParametersScaleFactorsLineGet(lineNumber, &
+                        & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+                    END IF
+
+                    ! Loop over line gauss points, adding gauss weighted terms to the integral
+                    DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+                      CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                        & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                      CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_LINE_TYPE, &
+                        & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+
+                      JGW=quadratureScheme%GAUSS_WEIGHTS(gaussIdx)*interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian
+
+                      DO nodeIdxn=1,basis%NUMBER_OF_NODES
+                        nodeNumber=line%NODES_IN_LINE(nodeIdxn)
+                        DO derivIdxn=1,basis%NUMBER_OF_DERIVATIVES(nodeIdxn)
+                          derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdxn,nodeIdxn)
+                          versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdxn,nodeIdxn)
+                          localDofN=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                            & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                          globalDofN=rhsVariable%DOMAIN_MAPPING%local_to_global_map(localDofN)
+                          DO nodeIdx=1,line%BASIS%NUMBER_OF_NODES
+                            nodeNumber=line%NODES_IN_LINE(nodeIdx)
+                            DO derivIdx=1,line%BASIS%NUMBER_OF_DERIVATIVES(nodeIdx)
+                              derivativeNumber=line%DERIVATIVES_IN_LINE(1,derivIdx,nodeIdx)
+                              versionNumber=line%DERIVATIVES_IN_LINE(2,derivIdx,nodeIdx)
+                              localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                                & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+
+                              ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                              os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
+                              ns=basis%ELEMENT_PARAMETER_INDEX(derivIdxn,nodeIdxn)
+
+                              !Get basis function values at guass points
+                              phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                              phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
+                              phin=quadratureScheme%GAUSS_BASIS_FNS(ns,NO_PART_DERIV,gaussIdx)
+
+                              !Add gauss point value to total line integral
+                              !int(huwd\Gamma)=Sigma_{ng=1}^gaussPoints ho phio phin phim J W
+                              integratedValueDynamic=h*phio*phim*phin*JGW !Elias1
+
+                              ! Multiply by scale factors for dependent variable
+                              IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                                integratedValueDynamic=integratedValueDynamic* &
+                                  & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
+                                  & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
+                              END IF
+
+                              ! Add the value directly into the conductivity matrix i.e. K in Cu'+Ku-f=0. K=K_e+K_h
+                              CALL DistributedMatrix_ValuesAdd(stiffnessMatrix%matrix,localDof,globalDofN, &
+                                & integratedValueDynamic,err,error,*999)
+                            END DO
+                          END DO !nodeIdx
+                        END DO
+                      END DO ! nodeIdxn
+                    END DO !gaussIdx
+                  END DO linesLoop
+                CASE(3)
+                  IF(.NOT.decomposition%CALCULATE_FACES) THEN
+                    CALL FlagError("Decomposition does not have faces calculated.",err,error,*999)
+                  END IF
+                  faces=>topology%FACES
+                  IF(.NOT.ASSOCIATED(faces)) THEN
+                    CALL FlagError("Mesh topology faces is not associated.",err,error,*999)
+                  END IF
+                  facesLoop: DO faceIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_FACES
+                    faceNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_FACES(faceIdx)
+                    face=>topology%FACES%FACES(faceNumber)
+                    IF(.NOT.face%BOUNDARY_FACE) &
+                      CYCLE facesLoop
+                    basis=>face%BASIS
+                    IF(.NOT.ASSOCIATED(basis)) THEN
+                      CALL FlagError("Line face is not associated.",err,error,*999)
+                    END IF
+                    RobinLocalNodeNumber=0
+                    RobinLocalDerivNumber=0
+                    ! Check all nodes in the face to find the local numbers for the Robin DOF, and
+                    ! make sure we don't have an integrated_only condition set on the face
+                    DO nodeIdx=1,basis%NUMBER_OF_NODES
+                      nodeNumber=face%NODES_IN_FACE(nodeIdx)
+                      DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+                        derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
+                        versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
+                        localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                          & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                        globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
+                        IF(globalDof==robinGlobalDof) THEN
+                          RobinLocalNodeNumber=nodeIdx
+                          RobinLocalDerivNumber=derivIdx
+    !                    ELSE IF(rhsBoundaryConditions%CONDITION_TYPES(globalDof)==BOUNDARY_CONDITION_Robin_INTEGRATED_ONLY) THEN
+    !                      CYCLE facesLoop
+                        END IF
+                      END DO
+                    END DO
+                    IF(RobinLocalNodeNumber==0) THEN
+                      CALL FlagError("Could not find local Robin node and derivative numbers in face.",err,error,*999)
+                    END IF
+
+                    ! Now perform actual integration
+                    quadratureScheme=>basis%QUADRATURE%QUADRATURE_SCHEME_MAP(BASIS_DEFAULT_QUADRATURE_SCHEME)%PTR
+                    IF(.NOT.ASSOCIATED(quadratureScheme)) THEN
+                      CALL FlagError("Face basis default quadrature scheme is not associated.",err,error,*999)
+                    END IF
+                    CALL FIELD_INTERPOLATION_PARAMETERS_FACE_GET(FIELD_VALUES_SET_TYPE,faceNumber, &
+                      & interpolationParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                    IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                      CALL Field_InterpolationParametersScaleFactorsFaceGet(faceNumber, &
+                        & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+                    END IF
+
+                    ! Loop over face gauss points, adding gauss weighted terms to the integral
+                    DO gaussIdx=1,quadratureScheme%NUMBER_OF_GAUSS
+                      CALL FIELD_INTERPOLATE_GAUSS(FIRST_PART_DERIV,BASIS_DEFAULT_QUADRATURE_SCHEME,gaussIdx, &
+                        & interpolatedPoints(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999,FIELD_GEOMETRIC_COMPONENTS_TYPE)
+                      CALL FIELD_INTERPOLATED_POINT_METRICS_CALCULATE(COORDINATE_JACOBIAN_AREA_TYPE, &
+                        & interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr,err,error,*999)
+
+                      JGW=quadratureScheme%GAUSS_WEIGHTS(gaussIdx)*interpolatedPointMetrics(FIELD_U_VARIABLE_TYPE)%ptr%jacobian
+
+                      DO nodeIdxn=1,basis%NUMBER_OF_NODES
+                        nodeNumber=face%NODES_IN_FACE(nodeIdxn)
+                        DO derivIdxn=1,basis%NUMBER_OF_DERIVATIVES(nodeIdxn)
+                          derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdxn,nodeIdxn)
+                          versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdxn,nodeIdxn)
+                          localDofN=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                            & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                          globalDofN=rhsVariable%DOMAIN_MAPPING%local_to_global_map(localDofN)
+                          DO nodeIdx=1,basis%NUMBER_OF_NODES
+                            nodeNumber=face%NODES_IN_FACE(nodeIdx)
+                            DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
+                              derivativeNumber=face%DERIVATIVES_IN_FACE(1,derivIdx,nodeIdx)
+                              versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
+                              localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
+                                & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+
+                              ms=basis%ELEMENT_PARAMETER_INDEX(derivIdx,nodeIdx)
+                              os=basis%ELEMENT_PARAMETER_INDEX(RobinLocalDerivNumber,RobinLocalNodeNumber)
+                              ns=basis%ELEMENT_PARAMETER_INDEX(derivIdxn,nodeIdxn)
+
+                              !Get basis function values at guass points
+                              phim=quadratureScheme%GAUSS_BASIS_FNS(ms,NO_PART_DERIV,gaussIdx)
+                              phio=quadratureScheme%GAUSS_BASIS_FNS(os,NO_PART_DERIV,gaussIdx)
+                              phin=quadratureScheme%GAUSS_BASIS_FNS(ns,NO_PART_DERIV,gaussIdx)
+
+                              !int(huwd\Gamma)=Sigma_{ng=1}^gaussPoints +ho phio phin phim J W
+                              integratedValueDynamic=h*phio*phim*phin*JGW !Elias1
+
+                              ! fMultiply by scale factors.
+                              IF(rhsVariable%FIELD%SCALINGS%SCALING_TYPE/=FIELD_NO_SCALING) THEN
+                                integratedValueDynamic=integratedValueDynamic* &
+                                  & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(ms,componentNumber)* &
+                                  & scalingParameters(FIELD_U_VARIABLE_TYPE)%ptr%SCALE_FACTORS(os,componentNumber)
+                              END IF
+
+                              ! Add the value directly into the conductivity matrix i.e. K in Cu'+Ku-f=0. K=K_e+K_h
+                              CALL DistributedMatrix_ValuesAdd(stiffnessMatrix%matrix,localDof,globalDofN, &
+                                & integratedValueDynamic,err,error,*999)
+
+                            END DO
+                          END DO !nodeIdx
+                        END DO
+                      END DO !nodeIdxn
+                    END DO !gaussIdx
+                  END DO facesLoop
+                CASE DEFAULT
+                  CALL FlagError("The dimension is invalid for point Robin conditions",err,error,*999)
+                END SELECT
+              CASE(FIELD_ELEMENT_BASED_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE(FIELD_CONSTANT_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE(FIELD_GRID_POINT_BASED_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE(FIELD_GAUSS_POINT_BASED_INTERPOLATION)
+                CALL FlagError("Not implemented.",err,error,*999)
+              CASE DEFAULT
+                CALL FlagError("The interpolation type of "// &
+                  & TRIM(NUMBER_TO_VSTRING(rhsVariable%COMPONENTS(componentNumber) &
+                  & %INTERPOLATION_TYPE,"*",ERR,ERROR))//" is invalid for component number "// &
+                  & TRIM(NUMBER_TO_VSTRING(componentNumber,"*",ERR,ERROR))//".", &
+                  & err,error,*999)
+              END SELECT
+            END IF
+          END IF
+        END DO
+
+        CALL DISTRIBUTED_MATRIX_UPDATE_START(stiffnessMatrix%matrix,err,error,*999)
+        CALL DISTRIBUTED_MATRIX_UPDATE_FINISH(stiffnessMatrix%matrix,err,error,*999)
+
+      END IF !Robin conditions associated
+    END IF !updateMatrix
 
     EXITS("BoundaryConditions_RobinDynamicIntegrate")
     RETURN

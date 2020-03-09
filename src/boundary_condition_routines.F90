@@ -5294,10 +5294,7 @@ CONTAINS
 
           domainNumber=-1
           DO domainIdx=1,rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%NUMBER_OF_DOMAINS !Elias */
-            IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainIdx)==myComputationalNodeNumber &
-              & .AND. (rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_TYPE(domainIdx)== &
-              & DOMAIN_LOCAL_BOUNDARY .OR. rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)% &
-              & LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_INTERNAL)) THEN
+            IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainIdx)==myComputationalNodeNumber) THEN
               domainNumber=domainIdx
             END IF
           END DO  !Elias /*

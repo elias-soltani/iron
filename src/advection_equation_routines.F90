@@ -1084,9 +1084,9 @@ CONTAINS
     REAL(DP) :: JGW,SUM,DXI_DX,DPHIMS_DXI,DPHINS_DXI,PHIMS,PHINS,flow,area,D,Conc,dConc,velocity,diffusivity,C_PARAM,cCoeff
     LOGICAL :: updateDampingMatrix,updateStiffnessMatrix
 
-    REAL(DP) :: tt,tmax,Qo,VALUE,le,Pe,beta,period,Coth,TIME,deltaTime !Elias
-    INTEGER(INTG) :: Uinterp,timeStep,comp1,comp2,myComputationalNodeNumber
-    REAL(DP) :: Tw,Qinterp,Ainterp
+    REAL(DP) :: tt,tmax,Qo,VALUE,le,Pe,beta,period,Coth,TIME,deltaTime,t0 !Elias
+    INTEGER(INTG) :: Uinterp,timeStep,comp1,comp2,myComputationalNodeNumber,timeStep2,comp2Next,comp1Next
+    REAL(DP) :: Tw,Qinterp,Ainterp,QinterpN,AinterpN,QinterpP,AinterpP
     ! updateDampingMatrix = .FALSE.
     ! updateStiffnessMatrix = .FALSE.
     ! Elias I don't know why they were set to false.
@@ -1300,7 +1300,7 @@ CONTAINS
 !              Conc=equations%interpolation%dependentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1,NO_PART_DERIV)
 !              dConc=equations%interpolation%dependentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1,FIRST_PART_DERIV)
 !              velocity=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1,NO_PART_DERIV)
-              Uinterp= 1 ! 0 for old 1 for new
+              Uinterp= 2 ! 0 for old 1 for new
               SELECT CASE(Uinterp)
               CASE(0)
                 period = 800.0
@@ -1315,7 +1315,7 @@ CONTAINS
                 cCoeff=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(2,NO_PART_DERIV) ! linear source b-cT
                 C_PARAM=equations%interpolation%sourceInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1, NO_PART_DERIV)
               CASE(1)
-                Tw = 36 ! TODO change this line. We need to evaluate Tw.
+                Tw = 36.5 ! TODO change this line. We need to evaluate Tw.
                 period = 1.0
                 TIME=equations_set%currentTime
                 tt=MOD(TIME,period)
@@ -1329,12 +1329,44 @@ CONTAINS
                 velocity=Qinterp/Ainterp
                 cCoeff=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(2,NO_PART_DERIV)/Ainterp ! linear source b-cT
                 C_PARAM=cCoeff*Tw
+              CASE(2)
+                Tw = 36.5_DP ! TODO change this line. We need to evaluate Tw.
+                period = 1.0_DP
+                TIME=equations_set%currentTime
+                tt=MOD(TIME,period)
+                timeStep=INT(tt/0.1_DP)+1
+                t0=(timeStep-1)*0.1_DP
+                IF(timeStep==1) THEN
+                  timeStep=11
+                END IF
+                IF(timeStep==11) THEN
+                  timeStep2=2
+                  t0=0.0_DP
+                ELSE
+                  timeStep2=timeStep+1
+                END IF
+
+                comp1=timeStep*2-1
+                comp2=timeStep*2
+                comp2Next=timeStep2*2
+                comp1Next=comp2Next-1
+                Qinterp=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(comp1,NO_PART_DERIV)
+                Ainterp=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(comp2,NO_PART_DERIV)
+                Qinterp=1000*Qinterp !convert from ml/s to mm3/s
+                QinterpN=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(comp1Next,NO_PART_DERIV)
+                AinterpN=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(comp2Next,NO_PART_DERIV)
+                QinterpN=1000*QinterpN !convert from ml/s to mm3/s
+                QinterpP=((tt-t0)/0.1_DP)*(QinterpN-Qinterp)+Qinterp
+                AinterpP=((tt-t0)/0.1_DP)*(AinterpN-Ainterp)+Ainterp
+                velocity=QinterpP/AinterpP
+                cCoeff=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(2,NO_PART_DERIV)/Ainterp ! linear source b-cT
+                C_PARAM=cCoeff*Tw
               END SELECT
 !              area=equations%interpolation%independentInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(2,NO_PART_DERIV)
               diffusivity=equations%interpolation%materialsInterpPoint(FIELD_U_VARIABLE_TYPE)%ptr%VALUES(1,NO_PART_DERIV)
 !              le=0.05_DP/6.0
               le=GEOMETRIC_FIELD%geometric_field_parameters%lengths(ELEMENT_NUMBER) ! le = sum_ng(  |J| * Wg )
-              Pe=velocity*le/(2*diffusivity)
+              Pe=ABS(velocity)*le/(2*diffusivity)
               beta=0.0_DP
               IF(Pe>1) THEN
                 beta=1.0_DP/tanh(Pe)-1.0_DP/Pe

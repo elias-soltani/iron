@@ -10137,12 +10137,12 @@ CONTAINS
     INTEGER(INTG), INTENT(OUT) :: ERR !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: ERROR !<The error string
     !Local variables
-    INTEGER(INTG) :: i,j,n,m
+    INTEGER(INTG) :: i,j,n,m,timeStep,inletType
     REAL(DP) :: L_PARAM,H_PARAM,U_PARAM,P_PARAM,MU_PARAM,NU_PARAM,RHO_PARAM,INTERNAL_TIME,CURRENT_TIME,K_PARAM
-    REAL(DP) :: amplitude,yOffset,period,phaseShift,frequency,s,startTime,stopTime,tt,tmax,Qo
-    REAL(DP) :: componentCoeff(4),delta(300),t(300),q(300)
+    REAL(DP) :: amplitude,yOffset,period,phaseShift,frequency,s,startTime,stopTime,tt,tmax,Qo,t0,dtDigitised
+    REAL(DP) :: componentCoeff(4),delta(300),t(300),q(300),Qflow(34)
     TYPE(VARYING_STRING) :: localError
-
+    LOGICAL :: singleVessel
     ENTERS("NAVIER_STOKES_ANALYTIC_FUNCTIONS_EVALUATE",err,error,*999)
 
     !\todo: Introduce user-defined or default values instead for density and viscosity
@@ -10346,6 +10346,36 @@ CONTAINS
               !Evaluate interpolant
               s=(MOD(TIME,period)/period)-t(m)
               VALUE=(q(m)+s*delta(m))
+
+              singleVessel=.TRUE.
+              IF(singleVessel) THEN
+                ! \* Elias
+                !Qflow=(/ 4.44, -0.269, 22.9, 119.0, 89.0, 21.3, -18.2, -9.02, 2.62, 10.1, 4.44 /)
+                dtDigitised=30.0_DP
+                inletType=3
+                period = 1000_DP
+                tt=MOD(TIME,period)
+                timeStep=INT(tt/dtDigitised)+1
+                t0=(timeStep-1)*dtDigitised
+                SELECT CASE(inletType)
+                CASE(1)
+                  Qflow=(/0.0,-0.77,1.0,0.03,-1.74,-2.83,6.55,32.63,70.2,101.62,118.65,119.89,111.46,94.6,73.4, &
+                    &	53.23,33.93,16.11,0.67,-11.49,-18.62,-19.57,-15.99,-11.12,-6.22,-1.61,1.75,4.18,6.52,8.63,10.2,9.58,8.26,7.97/)
+                  VALUE=((tt-t0)/dtDigitised)*(Qflow(timeStep+1)-Qflow(timeStep))+Qflow(timeStep)
+                CASE(2)
+                  IF(TIME>200.0_DP) THEN
+                    VALUE=100.0_DP
+                  ELSE
+                    VALUE=0.0_DP
+                  END IF
+                CASE(3)
+                  Qflow=(/0.00,23.34,45.40,64.94,80.90,92.39,98.77,99.69,95.11,85.26,70.71,52.25,30.90,7.85,0.0,0.0,0.0,0.0, &
+                    &	0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0/)
+                  VALUE=((tt-t0)/dtDigitised)*(Qflow(timeStep+1)-Qflow(timeStep))+Qflow(timeStep)
+                  !nothing
+                END SELECT
+                ! */ Elias
+              END IF
 
              ELSE
                CALL FlagError("Incorrect component specification for Aorta flow rate waveform ",ERR,ERROR,*999)
@@ -14636,6 +14666,10 @@ CONTAINS
     REAL(DP), POINTER :: Impedance(:),Flow(:)
     INTEGER(INTG) :: nodeIdx,versionIdx,derivativeIdx,componentIdx,numberOfVersions,numberOfLocalNodes
     INTEGER(INTG) :: dependentDof,boundaryConditionType,k,variableLocalDof
+    REAL(DP) :: Pout(34)
+    REAL(DP) :: TIME, tt, t0,dtDigitised, P_VALUE, period
+    INTEGER(INTG) :: timeStep
+    LOGICAL :: singleVessel
 
     ENTERS("NavierStokes_UpdateMultiscaleBoundary",err,error,*999)
 
@@ -14767,6 +14801,25 @@ CONTAINS
                 ! Calculate new area value based on W1, W2 and update dof
                 ABoundary = (((2.0_DP*rho)/(beta))**2.0_DP)* &
                  & (((W1-W2)/8.0_DP+SQRT(beta/(2.0_DP*rho))*((A0)**0.25_DP))**4.0_DP)
+                ! \* Elias
+                !Single vessel P_outlet boundary conditions
+                ! singleVessel=.FALSE.
+                ! IF(singleVessel) THEN
+                !
+                !   dtDigitised=30.0_DP
+                !   Pout=(/0.01070,0.01067,0.01068,0.01065,0.01061,0.01066,0.01068,0.01064,0.01057,0.01068,0.01155,0.01338,0.01490, &
+                !     & 0.01563,0.01571,0.01538,0.01473,0.01386,0.01296,0.01221,0.01162,0.01108,0.01059,0.01017,0.00989,0.00984, &
+                !     & 0.00999,0.01022,0.01049,0.01075,0.01093,0.01104,0.01109,0.01113/)
+                !   period = 1000_DP
+                !   TIME=equationsSet%currentTime
+                !   tt=MOD(TIME,period)
+                !   timeStep=INT(tt/dtDigitised)+1
+                !   t0=(timeStep-1)*dtDigitised
+                !   P_VALUE=((tt-t0)/dtDigitised)*(Pout(timeStep+1)-Pout(timeStep))+Pout(timeStep)
+                ! ABoundary=(P_VALUE/beta+sqrt(A0))**2.0_DP
+                ! END IF
+                ! ABoundary=A0
+                ! */ Elias
                 IF(ABoundary < ZERO_TOLERANCE) THEN
                   localError="Negative area 1D non-reflecting boundary detected at node "//TRIM(NUMBER_TO_VSTRING(nodeIdx, &
                    & "*",err,error))//"."

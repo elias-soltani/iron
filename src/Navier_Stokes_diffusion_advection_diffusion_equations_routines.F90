@@ -2530,7 +2530,7 @@ CONTAINS
     INTEGER(INTG), INTENT(OUT) :: err !<The error code
     TYPE(VARYING_STRING), INTENT(OUT) :: error !<The error string
     !Local Variables
-    TYPE(CONTROL_LOOP_TYPE), POINTER :: subloop,subloop2,subloop3,iterativeWhileLoop2,iterativeWhileLoop3
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: subloop,subloop2,subloop3,iterativeWhileLoop2,iterativeWhileLoop3,timeLoopFlow
     TYPE(SOLVER_TYPE), POINTER :: navierStokesSolver,navierStokesSolver3D,navierStokesSolver1D,solverDiffusion
     TYPE(SOLVER_MAPPING_TYPE), POINTER :: solverMapping,solverMapping2
     TYPE(EQUATIONS_SET_TYPE), POINTER :: equationsSet,equationsSet2,coupledEquationsSet
@@ -2574,10 +2574,9 @@ CONTAINS
           !Only two time steps allowed to update the matrices
           IF (currentTime>=2*timeIncrement)THEN
             IF(controlLoop%control_loop_level==2 .AND. controlLoop%sub_loop_index==3) THEN
+              ! Get the equations vector and matrices
               NULLIFY(solvers)
               CALL CONTROL_LOOP_SOLVERS_GET(controlLoop,solvers,err,error,*999)
-  !!!-- B I O H E A T --!!!
-              !Set the second solver to be a linear solver for the diffusion problem
               NULLIFY(solverDiffusion)
               CALL SOLVERS_SOLVER_GET(solvers,2,solverDiffusion,err,error,*999)
               NULLIFY(solverEquations)
@@ -2592,6 +2591,7 @@ CONTAINS
               CALL EquationsSet_EquationsGet(equationsSet,equations,err,error,*999)
               CALL Equations_VectorEquationsGet(equations,vectorEquations,err,error,*999)
               CALL EquationsVector_VectorMatricesGet(vectorEquations,vectorMatrices,err,error,*999)
+              ! Turn off the flags for updating matrices that do not vary with time.
               vectorMatrices%dynamicMatrices%matrices(1)%ptr%updateMatrix=.FALSE.
               vectorMatrices%dynamicMatrices%matrices(2)%ptr%updateMatrix=.FALSE.
               NULLIFY(solverMatrices)
@@ -2612,11 +2612,20 @@ CONTAINS
             ! inner time loop - export data?
             navierStokesSolver=>controlLoop%SUB_LOOPS(1)%ptr%SOLVERS%SOLVERS(2)%ptr
             CALL NAVIER_STOKES_POST_SOLVE_OUTPUT_DATA(navierStokesSolver,err,error,*999)
+            CALL NavierStokesDiffAdvDiff_CoupleFlow(controlLoop,navierStokesSolver,err,error,*999)
           END IF
         CASE(PROBLEM_CONTROL_WHILE_LOOP_TYPE)
           IF(controlLoop%CONTROL_LOOP_LEVEL>2) THEN
             navierStokesSolver=>controlLoop%SOLVERS%SOLVERS(2)%ptr
             CALL NavierStokes_CoupleCharacteristics(controlLoop,navierStokesSolver,err,error,*999)
+          END IF
+          IF(controlLoop%CONTROL_LOOP_LEVEL==2) THEN
+            !Get flow time loop
+            NULLIFY(timeLoopFlow)
+            CALL CONTROL_LOOP_SUB_LOOP_GET(controlLoop,1,timeLoopFlow,err,error,*999)
+            ! Stop executing flow solver for the next time step
+            timeLoopFlow%TIME_LOOP%STOP_TIME=0.0_DP
+            timeLoopFlow%TIME_LOOP%NUMBER_OF_ITERATIONS=0
           END IF
         CASE DEFAULT
           localError="The control loop type of "//TRIM(NumberToVString(controlLoop%LOOP_TYPE,"*",err,error))// &
@@ -2840,6 +2849,90 @@ CONTAINS
 
   END SUBROUTINE NavierStokesDiffAdvDiff_PostSolveOutputData
 
+  !
+  !================================================================================================================================
+  !
+  !>This subroutine couples flow and energy for 1D Navier Stokes:
+  SUBROUTINE NavierStokesDiffAdvDiff_CoupleFlow(controlLoop,navierStokesSolver, &
+    & err,error,*)
+
+    !Argument variables
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: controlLoop !<A pointer to the control loop to solve.
+    TYPE(SOLVER_TYPE), POINTER :: navierStokesSolver  !<A pointer to the solver
+    INTEGER(INTG), INTENT(OUT) :: err              !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error     !<The error string
+
+    !Local variables
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: controlLoopRoot,CONTROL_LOOP,simpleLoop2
+    TYPE(SOLVERS_TYPE), POINTER :: solvers
+    TYPE(SOLVER_TYPE), POINTER :: solverEnergy
+    TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: solverEquations
+    TYPE(SOLVER_MAPPING_TYPE), POINTER :: solverMapping
+    TYPE(EQUATIONS_SET_TYPE), POINTER :: equationsSet
+    TYPE(FIELD_TYPE), POINTER :: dependentFieldNavierStokes,independentFieldEnergy
+    REAL(DP) :: currentTime,timeIncrement,storingTimeStep
+    INTEGER(INTG) :: compIdx,compIdx2,timeStep
+
+    ENTERS("NavierStokesDiffAdvDiff_CoupleFlow",err,error,*999)
+
+    !Get the dependent field for navier stokes solver
+    NULLIFY(solverEquations)
+    NULLIFY(solverMapping)
+    NULLIFY(equationsSet)
+    NULLIFY(dependentFieldNavierStokes)
+    CALL Solver_SolverEquationsGet(navierStokesSolver,solverEquations,err,error,*999)
+    CALL SolverEquations_SolverMappingGet(solverEquations,solverMapping,err,error,*999)
+    CALL SolverMapping_EquationsSetGet(solverMapping,1,equationsSet,err,error,*999)
+    CALL EquationsSet_DependentFieldGet(equationsSet,dependentFieldNavierStokes,err,error,*999)
+
+    !Get the energy solver
+    IF(controlLoop%CONTROL_LOOP_LEVEL>2) THEN
+      NULLIFY(controlLoopRoot)
+      controlLoopRoot=>controlLoop%problem%control_loop
+      NULLIFY(CONTROL_LOOP)
+      CALL CONTROL_LOOP_GET(controlLoopRoot,CONTROL_LOOP_NODE,CONTROL_LOOP,ERR,ERROR,*999)
+      !Simple loop for solving vessels energy equation and bioheat equation in tissues
+      NULLIFY(simpleLoop2)
+      CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
+      NULLIFY(solvers)
+      CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop2,solvers,err,error,*999)
+      NULLIFY(solverEnergy)
+      CALL SOLVERS_SOLVER_GET(solvers,1,solverEnergy,err,error,*999)
+      ! Get the current time. The unit could be ms or s
+      CALL ControlLoop_CurrentTimesGet(controlLoop,currentTime,timeIncrement,err,error,*999)
+    ELSE
+      CALL FlagError("control loop level is not greater than two.",err,error,*999)
+    END IF
+
+    ! Get the energy solver independent field
+    NULLIFY(solverEquations)
+    NULLIFY(solverMapping)
+    NULLIFY(equationsSet)
+    NULLIFY(independentFieldEnergy)
+    CALL Solver_SolverEquationsGet(solverEnergy,solverEquations,err,error,*999)
+    CALL SolverEquations_SolverMappingGet(solverEquations,solverMapping,err,error,*999)
+    CALL SolverMapping_EquationsSetGet(solverMapping,1,equationsSet,err,error,*999)
+    CALL EquationsSet_IndependentFieldGet(equationsSet,independentFieldEnergy,err,error,*999)
+
+    ! Copy the current time value parameters set from flow dependent field to energy independent field
+    currentTime=currentTime/1000.0_DP ! convert to s
+    timeIncrement=timeIncrement/1000.0_DP
+    storingTimeStep=0.1_DP
+    timeStep=NINT(currentTime/storingTimeStep)
+    IF(ABS(currentTime-timeStep*storingTimeStep)<(timeIncrement/2.0_DP) .AND. currentTime<1.09) THEN
+      Do compIdx=1,dependentFieldNavierStokes%variables(1)%NUMBER_OF_COMPONENTS
+        compIdx2=2*timeStep+compIdx
+        CALL Field_ParametersToFieldParametersCopy(dependentFieldNavierStokes, &
+          & FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,compIdx,independentFieldEnergy, &
+          & FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,compIdx2,err,error,*999)
+      END DO
+    END IF
+
+    EXITS("NavierStokesDiffAdvDiff_CoupleFlow")
+    RETURN
+999 ERRORSEXITS("NavierStokesDiffAdvDiff_CoupleFlow",err,error)
+    RETURN 1
+  END SUBROUTINE NavierStokesDiffAdvDiff_CoupleFlow
 
   !
   !================================================================================================================================

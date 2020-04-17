@@ -10347,35 +10347,35 @@ CONTAINS
               s=(MOD(TIME,period)/period)-t(m)
               VALUE=(q(m)+s*delta(m))
 
-              singleVessel=.TRUE.
-              IF(singleVessel) THEN
-                ! \* Elias
-                !Qflow=(/ 4.44, -0.269, 22.9, 119.0, 89.0, 21.3, -18.2, -9.02, 2.62, 10.1, 4.44 /)
-                dtDigitised=30.0_DP
-                inletType=3
-                period = 1000_DP
-                tt=MOD(TIME,period)
-                timeStep=INT(tt/dtDigitised)+1
-                t0=(timeStep-1)*dtDigitised
-                SELECT CASE(inletType)
-                CASE(1)
-                  Qflow=(/0.0,-0.77,1.0,0.03,-1.74,-2.83,6.55,32.63,70.2,101.62,118.65,119.89,111.46,94.6,73.4, &
-                    &	53.23,33.93,16.11,0.67,-11.49,-18.62,-19.57,-15.99,-11.12,-6.22,-1.61,1.75,4.18,6.52,8.63,10.2,9.58,8.26,7.97/)
-                  VALUE=((tt-t0)/dtDigitised)*(Qflow(timeStep+1)-Qflow(timeStep))+Qflow(timeStep)
-                CASE(2)
-                  IF(TIME>200.0_DP) THEN
-                    VALUE=100.0_DP
-                  ELSE
-                    VALUE=0.0_DP
-                  END IF
-                CASE(3)
-                  Qflow=(/0.00,23.34,45.40,64.94,80.90,92.39,98.77,99.69,95.11,85.26,70.71,52.25,30.90,7.85,0.0,0.0,0.0,0.0, &
-                    &	0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0/)
-                  VALUE=((tt-t0)/dtDigitised)*(Qflow(timeStep+1)-Qflow(timeStep))+Qflow(timeStep)
-                  !nothing
-                END SELECT
+              ! singleVessel=.TRUE.
+              ! IF(singleVessel) THEN
+              !   ! \* Elias
+              !   !Qflow=(/ 4.44, -0.269, 22.9, 119.0, 89.0, 21.3, -18.2, -9.02, 2.62, 10.1, 4.44 /)
+              !   dtDigitised=30.0_DP
+              !   inletType=3
+              !   period = 1000_DP
+              !   tt=MOD(TIME,period)
+              !   timeStep=INT(tt/dtDigitised)+1
+              !   t0=(timeStep-1)*dtDigitised
+              !   SELECT CASE(inletType)
+              !   CASE(1)
+              !     Qflow=(/0.0,-0.77,1.0,0.03,-1.74,-2.83,6.55,32.63,70.2,101.62,118.65,119.89,111.46,94.6,73.4, &
+              !       &	53.23,33.93,16.11,0.67,-11.49,-18.62,-19.57,-15.99,-11.12,-6.22,-1.61,1.75,4.18,6.52,8.63,10.2,9.58,8.26,7.97/)
+              !     VALUE=((tt-t0)/dtDigitised)*(Qflow(timeStep+1)-Qflow(timeStep))+Qflow(timeStep)
+              !   CASE(2)
+              !     IF(TIME>200.0_DP) THEN
+              !       VALUE=100.0_DP
+              !     ELSE
+              !       VALUE=0.0_DP
+              !     END IF
+              !   CASE(3)
+              !     Qflow=(/0.00,23.34,45.40,64.94,80.90,92.39,98.77,99.69,95.11,85.26,70.71,52.25,30.90,7.85,0.0,0.0,0.0,0.0, &
+              !       &	0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0/)
+              !     VALUE=((tt-t0)/dtDigitised)*(Qflow(timeStep+1)-Qflow(timeStep))+Qflow(timeStep)
+              !     !nothing
+              !   END SELECT
                 ! */ Elias
-              END IF
+              ! END IF
 
              ELSE
                CALL FlagError("Incorrect component specification for Aorta flow rate waveform ",ERR,ERROR,*999)

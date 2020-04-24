@@ -1351,11 +1351,17 @@ CONTAINS
       !get the node domain.
       T_core=0.0_DP
       myComputationalNodeNumber=ComputationalEnvironment_NodeNumberGet(err,error)
-      CALL DECOMPOSITION_NODE_DOMAIN_GET(decomposition,28589,1,nodeDomain,err,error,*999)
+      open(21,file='./input/bioheat/core',status='unknown')
+      read(21,*) nodeNumber
+      REWIND(21)
+
+
+      CALL DECOMPOSITION_NODE_DOMAIN_GET(decomposition,nodeNumber,1,nodeDomain,err,error,*999)
       IF (nodeDomain == myComputationalNodeNumber) THEN
         !get the temperature for the node
         CALL Field_ParameterSetGetNode(dependentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,1,1, &
-          & 28589,1,T_core,err,error,*999)
+          & nodeNumber,1,T_core,err,error,*999)
+        close(21)
       END IF
 
       IF(computationalEnvironment%numberOfComputationalNodes>1) THEN

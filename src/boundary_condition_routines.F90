@@ -4925,11 +4925,17 @@ CONTAINS
           robinGlobalDof=robinConditions%setDofs(RobinDofIdx)
 
           domainNumber=-1
+          ! DO domainIdx=1,rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%NUMBER_OF_DOMAINS !Elias */
+          !   IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainIdx)==myComputationalNodeNumber &
+          !     & .AND. (rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_TYPE(domainIdx)== &
+          !     & DOMAIN_LOCAL_BOUNDARY .OR. rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)% &
+          !     & LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_INTERNAL)) THEN
+          !     domainNumber=domainIdx
+          !   END IF
+          ! END DO  !Elias /*
+
           DO domainIdx=1,rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%NUMBER_OF_DOMAINS !Elias */
-            IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainIdx)==myComputationalNodeNumber &
-              & .AND. (rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%LOCAL_TYPE(domainIdx)== &
-              & DOMAIN_LOCAL_BOUNDARY .OR. rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)% &
-              & LOCAL_TYPE(domainIdx)==DOMAIN_LOCAL_INTERNAL)) THEN
+            IF(rhsVariable%DOMAIN_MAPPING%GLOBAL_TO_LOCAL_MAP(robinGlobalDof)%DOMAIN_NUMBER(domainIdx)==myComputationalNodeNumber) THEN
               domainNumber=domainIdx
             END IF
           END DO  !Elias /*
@@ -4969,6 +4975,7 @@ CONTAINS
                   linesLoop: DO lineIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_LINES
                     lineNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_LINES(lineIdx)
                     line=>topology%lines%lines(lineNumber)
+                    !Check to see if the line is a boundary line and check if it is not on a ghost face.
                     IF(.NOT.line%BOUNDARY_LINE) &
                       CYCLE linesLoop
                     basis=>line%basis
@@ -5063,6 +5070,8 @@ CONTAINS
                   facesLoop: DO faceIdx=1,topology%NODES%NODES(RobinNodeNumber)%NUMBER_OF_NODE_FACES
                     faceNumber=topology%NODES%NODES(RobinNodeNumber)%NODE_FACES(faceIdx)
                     face=>topology%FACES%FACES(faceNumber)
+
+                    !Check to see if face does not belong to a ghost element. Then check if it is mesh boundary.
                     IF(.NOT.face%BOUNDARY_FACE) &
                       CYCLE facesLoop
                     basis=>face%BASIS
@@ -5072,7 +5081,7 @@ CONTAINS
                     RobinLocalNodeNumber=0
                     RobinLocalDerivNumber=0
                     ! Check all nodes in the face to find the local numbers for the Robin DOF, and
-                    ! make sure we don't have an integrated_only condition set on the face
+                    ! make sure we don't have an integrated_only condition set on the face IF(.NOT.topology%NODES%NODES(33)%boundary_node) mesh_boundary_face=.FALSE.
                     DO nodeIdx=1,basis%NUMBER_OF_NODES
                       nodeNumber=face%NODES_IN_FACE(nodeIdx)
                       DO derivIdx=1,basis%NUMBER_OF_DERIVATIVES(nodeIdx)
@@ -5080,6 +5089,9 @@ CONTAINS
                         versionNumber=face%DERIVATIVES_IN_FACE(2,derivIdx,nodeIdx)
                         localDof=rhsVariable%COMPONENTS(componentNumber)%PARAM_TO_DOF_MAP%NODE_PARAM2DOF_MAP% &
                           & NODES(nodeNumber)%DERIVATIVES(derivativeNumber)%VERSIONS(versionNumber)
+                        ! Check to see if all the nodes are boundary node. If one node is not a boundary node, the face is a domain boundary and not a mesh boundary.
+                        IF(.NOT.topology%NODES%NODES(localDof)%boundary_node) &
+                          CYCLE facesLoop
                         globalDof=rhsVariable%DOMAIN_MAPPING%LOCAL_TO_GLOBAL_MAP(localDof)
                         IF(globalDof==robinGlobalDof) THEN
                           RobinLocalNodeNumber=nodeIdx

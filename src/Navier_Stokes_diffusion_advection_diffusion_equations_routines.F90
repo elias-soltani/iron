@@ -94,6 +94,15 @@ MODULE NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_ROUTINES
 #include "mpif.h"
 #endif
 
+  TYPE :: SCHEDULE_TYPE
+    REAL(DP) :: start
+    INTEGER(INTG) :: timeIncrement
+    INTEGER(INTG) :: timeSteps
+    INTEGER(INTG) :: outputFrequency
+    REAL(DP) :: convectionCoeff
+    REAL(DP) :: heatFlux
+  END TYPE SCHEDULE_TYPE
+
   PUBLIC NavierStokesDiffAdvDiff_EquationsSetSetup
   PUBLIC NavierStokesDiffAdvDiff_EquationsSetSpecSet
   PUBLIC NavierStokesDiffAdvDiff_EquationsSetSolnMethodSet
@@ -2579,6 +2588,11 @@ CONTAINS
     character(70) :: label
     REAL(DP) :: currentTime,timeIncrement
 
+    TYPE(SCHEDULE_TYPE) :: schedule(6)
+    CHARACTER(len=18) :: header
+    INTEGER(INTG) :: phases,phaseIdx,phaseNumber
+    REAL(DP) :: stopTime
+
     ENTERS("NavierStokesDiffAdvDiff_ControlLoopPostLoop",err,error,*999)
 
     NULLIFY(equationsSet)
@@ -2593,43 +2607,62 @@ CONTAINS
       SELECT CASE(controlLoop%PROBLEM%specification(3))
 
       CASE(PROBLEM_COUPLED_BIOHEAT_NAVIERSTOKES_DIFF_ADV_DIFF_SUBTYPE)
+        CALL ControlLoop_CurrentTimesGet(controlLoop,currentTime,timeIncrement,err,error,*999)
+        open(22,file='./input/bioheat/schedule',status='unknown')
+        read(22,*) header
+        read(22,*) phases
+        DO phaseIdx=1,phases
+          read(22,*) schedule(phaseIdx)
+          stopTime=schedule(phaseIdx)%timeIncrement*schedule(phaseIdx)%timeSteps
+          IF(currentTime<stopTime .AND. currentTime>=schedule(phaseIdx)%start) &
+            & phaseNumber=phaseIdx
+        END DO
+        REWIND(22)
+        close(22)
+
         SELECT CASE(controlLoop%LOOP_TYPE)
         CASE(PROBLEM_CONTROL_SIMPLE_TYPE)
           ! For bioheat equaiton in tissue, we do not need to update all the matrices
-          CALL ControlLoop_CurrentTimesGet(controlLoop,currentTime,timeIncrement,err,error,*999)
           !Only two time steps allowed to update the matrices
-          IF (currentTime>=2*timeIncrement)THEN
-            IF(controlLoop%control_loop_level==2 .AND. controlLoop%sub_loop_index==3) THEN
-              ! Get the equations vector and matrices
-              NULLIFY(solvers)
-              CALL CONTROL_LOOP_SOLVERS_GET(controlLoop,solvers,err,error,*999)
-              NULLIFY(solverDiffusion)
-              CALL SOLVERS_SOLVER_GET(solvers,2,solverDiffusion,err,error,*999)
-              NULLIFY(solverEquations)
-              NULLIFY(solverMapping)
-              NULLIFY(equationsSet)
-              NULLIFY(equations)
-              NULLIFY(vectorEquations)
-              NULLIFY(vectorMatrices)
-              CALL Solver_SolverEquationsGet(solverDiffusion,solverEquations,err,error,*999)
-              CALL SolverEquations_SolverMappingGet(solverEquations,solverMapping,err,error,*999)
-              CALL SolverMapping_EquationsSetGet(solverMapping,1,equationsSet,err,error,*999)
-              CALL EquationsSet_EquationsGet(equationsSet,equations,err,error,*999)
-              CALL Equations_VectorEquationsGet(equations,vectorEquations,err,error,*999)
-              CALL EquationsVector_VectorMatricesGet(vectorEquations,vectorMatrices,err,error,*999)
+          IF(controlLoop%control_loop_level==2 .AND. controlLoop%sub_loop_index==3) THEN
+            ! Get the equations vector and matrices
+            NULLIFY(solvers)
+            CALL CONTROL_LOOP_SOLVERS_GET(controlLoop,solvers,err,error,*999)
+            NULLIFY(solverDiffusion)
+            CALL SOLVERS_SOLVER_GET(solvers,2,solverDiffusion,err,error,*999)
+            NULLIFY(solverEquations)
+            NULLIFY(solverMapping)
+            NULLIFY(equationsSet)
+            NULLIFY(equations)
+            NULLIFY(vectorEquations)
+            NULLIFY(vectorMatrices)
+            CALL Solver_SolverEquationsGet(solverDiffusion,solverEquations,err,error,*999)
+            CALL SolverEquations_SolverMappingGet(solverEquations,solverMapping,err,error,*999)
+            CALL SolverMapping_EquationsSetGet(solverMapping,1,equationsSet,err,error,*999)
+            CALL EquationsSet_EquationsGet(equationsSet,equations,err,error,*999)
+            CALL Equations_VectorEquationsGet(equations,vectorEquations,err,error,*999)
+            CALL EquationsVector_VectorMatricesGet(vectorEquations,vectorMatrices,err,error,*999)
+            NULLIFY(boundaryConditions)
+            CALL SolverEquations_BoundaryConditionsGet(solverEquations,boundaryConditions,err,error,*999)
+            robinConditions=>boundaryConditions%robinBoundaryConditions
+            NULLIFY(solverMatrices)
+            NULLIFY(solverMatrix)
+            CALL SolverEquations_SolverMatricesGet(solverEquations,solverMatrices,err,error,*999)
+            CALL SolverMatrices_SolverMatrixGet(solverMatrices,1,solverMatrix,err,error,*999)
+            IF(currentTime>=2*timeIncrement+schedule(phaseNumber)%start) THEN
               ! Turn off the flags for updating matrices that do not vary with time.
               vectorMatrices%dynamicMatrices%matrices(1)%ptr%updateMatrix=.FALSE.
               vectorMatrices%dynamicMatrices%matrices(2)%ptr%updateMatrix=.FALSE.
-              NULLIFY(solverMatrices)
-              NULLIFY(solverMatrix)
-              CALL SolverEquations_SolverMatricesGet(solverEquations,solverMatrices,err,error,*999)
-              CALL SolverMatrices_SolverMatrixGet(solverMatrices,1,solverMatrix,err,error,*999)
               solverMatrix%update_matrix=.FALSE.
-              NULLIFY(boundaryConditions)
-              CALL SolverEquations_BoundaryConditionsGet(solverEquations,boundaryConditions,err,error,*999)
-              robinConditions=>boundaryConditions%robinBoundaryConditions
               IF(ASSOCIATED(robinConditions)) THEN
                 robinConditions%updateMatrix=.FALSE.
+              END IF
+            ELSE
+              vectorMatrices%dynamicMatrices%matrices(1)%ptr%updateMatrix=.TRUE.
+              vectorMatrices%dynamicMatrices%matrices(2)%ptr%updateMatrix=.TRUE.
+              solverMatrix%update_matrix=.TRUE.
+              IF(ASSOCIATED(robinConditions)) THEN
+                robinConditions%updateMatrix=.TRUE.
               END IF
             END IF
           END IF
@@ -2639,6 +2672,14 @@ CONTAINS
             navierStokesSolver=>controlLoop%SUB_LOOPS(1)%ptr%SOLVERS%SOLVERS(2)%ptr
             CALL NAVIER_STOKES_POST_SOLVE_OUTPUT_DATA(navierStokesSolver,err,error,*999)
             CALL NavierStokesDiffAdvDiff_CoupleFlow(controlLoop,navierStokesSolver,err,error,*999)
+          END IF
+          !If we have different phases, modify paramerters
+          IF(controlLoop%CONTROL_LOOP_LEVEL==1) THEN
+            !Update time increment
+            !controlLoop%TIME_LOOP%TIME_INCREMENT=schedule(phaseNumber)%timeIncrement
+            IF(currentTime>=schedule(phaseNumber)%start .AND. currentTime<schedule(phaseNumber)%start+timeIncrement) THEN
+              CALL NavierStokesDiffAdvDiff_UpdateBoundary(controlLoop,schedule(phaseNumber),err,error,*999)
+            END IF
           END IF
         CASE(PROBLEM_CONTROL_WHILE_LOOP_TYPE)
           IF(controlLoop%CONTROL_LOOP_LEVEL>2) THEN
@@ -3436,9 +3477,67 @@ CONTAINS
 !
 !   END SUBROUTINE FLUID_MECHANICS_IO_READ_DATA
 
-  ! OK
+  !
   !================================================================================================================================
   !
+   !Elias
+ !>Update ambient boundary conditions
+  SUBROUTINE NavierStokesDiffAdvDiff_UpdateBoundary(controlLoop,schedule, &
+    & err,error,*)
+
+    !Argument variables
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: controlLoop !<A pointer to the control loop.
+    TYPE(SCHEDULE_TYPE), INTENT(IN) :: schedule !<stores parameters in different phases of the simulation
+    INTEGER(INTG), INTENT(OUT) :: err              !<The error code
+    TYPE(VARYING_STRING), INTENT(OUT) :: error     !<The error string
+
+    !Local variables
+    TYPE(VARYING_STRING) :: localError
+
+    TYPE(CONTROL_LOOP_TYPE), POINTER :: CONTROL_LOOP_ROOT,CONTROL_LOOP,simpleLoop2
+    TYPE(SOLVERS_TYPE), POINTER :: solvers
+    TYPE(SOLVER_TYPE), POINTER :: solverDiffusion
+    TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: solverEquationsDiffusion
+    TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: boundaryConditions
+    TYPE(BoundaryConditionsRobinType), POINTER :: robinConditions
+    REAL(DP) :: value
+
+    ENTERS("NavierStokesDiffAdvDiff_UpdateBoundary",err,error,*999)
+
+    !Get the bioheat solver
+    NULLIFY(CONTROL_LOOP_ROOT)
+    CONTROL_LOOP_ROOT=>controlLoop%PROBLEM%CONTROL_LOOP
+    NULLIFY(CONTROL_LOOP)
+    CALL CONTROL_LOOP_GET(CONTROL_LOOP_ROOT,CONTROL_LOOP_NODE,CONTROL_LOOP,err,error,*999)
+    NULLIFY(simpleLoop2)
+    CALL CONTROL_LOOP_SUB_LOOP_GET(CONTROL_LOOP,3,simpleLoop2,err,error,*999)
+    NULLIFY(solvers)
+    CALL CONTROL_LOOP_SOLVERS_GET(simpleLoop2,solvers,err,error,*999)
+    NULLIFY(solverDiffusion)
+    CALL SOLVERS_SOLVER_GET(solvers,2,solverDiffusion,err,error,*999)
+    NULLIFY(solverEquationsDiffusion)
+    CALL Solver_SolverEquationsGet(solverDiffusion,solverEquationsDiffusion,err,error,*999)
+
+   !get robin conditions
+    NULLIFY(boundaryConditions)
+    boundaryConditions=>solverEquationsDiffusion%BOUNDARY_CONDITIONS
+    NULLIFY(robinConditions)
+    IF(ASSOCIATED(boundaryConditions)) THEN
+        robinConditions=>boundaryConditions%robinBoundaryConditions
+    ELSE
+      CALL FlagError("boundaryConditions is not associated.",err,error,*999)
+    END IF
+    ! Update robin conditions
+    CALL DistributedVector_ValuesGet(robinConditions%convectionCoeff,1,value,err,error,*999)
+    CALL DistributedVector_AllValuesSet(robinConditions%convectionCoeff,value*schedule%convectionCoeff,err,error,*999)
+    CALL DistributedVector_ValuesGet(robinConditions%heatFlux,1,value,err,error,*999)
+    CALL DistributedVector_AllValuesSet(robinConditions%heatFlux,value*schedule%heatFlux,err,error,*999)
+
+    EXITS("NavierStokesDiffAdvDiff_UpdateBoundary")
+    RETURN
+999 ERRORSEXITS("NavierStokesDiffAdvDiff_UpdateBoundary",err,error)
+    RETURN 1
+  END SUBROUTINE NavierStokesDiffAdvDiff_UpdateBoundary
   !
   !================================================================================================================================
   !

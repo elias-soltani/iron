@@ -3528,10 +3528,8 @@ CONTAINS
       CALL FlagError("boundaryConditions is not associated.",err,error,*999)
     END IF
     ! Update robin conditions
-    CALL DistributedVector_ValuesGet(robinConditions%convectionCoeff,1,value,err,error,*999)
-    CALL DistributedVector_AllValuesSet(robinConditions%convectionCoeff,value*schedule%convectionCoeff,err,error,*999)
-    CALL DistributedVector_ValuesGet(robinConditions%heatFlux,1,value,err,error,*999)
-    CALL DistributedVector_AllValuesSet(robinConditions%heatFlux,value*schedule%heatFlux,err,error,*999)
+    CALL DistributedVector_AllValuesSet(robinConditions%convectionCoeff,schedule%convectionCoeff,err,error,*999)
+    CALL DistributedVector_AllValuesSet(robinConditions%heatFlux,schedule%heatFlux,err,error,*999)
 
     EXITS("NavierStokesDiffAdvDiff_UpdateBoundary")
     RETURN

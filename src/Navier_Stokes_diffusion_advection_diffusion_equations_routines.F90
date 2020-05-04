@@ -101,6 +101,8 @@ MODULE NAVIER_STOKES_DIFFUSION_ADVECTION_DIFFUSION_ROUTINES
     INTEGER(INTG) :: outputFrequency
     REAL(DP) :: convectionCoeff
     REAL(DP) :: heatFlux
+    REAL(DP) :: Tair
+    REAL(DP) :: Pv
   END TYPE SCHEDULE_TYPE
 
   PUBLIC NavierStokesDiffAdvDiff_EquationsSetSetup
@@ -3498,6 +3500,9 @@ CONTAINS
     TYPE(SOLVERS_TYPE), POINTER :: solvers
     TYPE(SOLVER_TYPE), POINTER :: solverDiffusion
     TYPE(SOLVER_EQUATIONS_TYPE), POINTER :: solverEquationsDiffusion
+    TYPE(SOLVER_MAPPING_TYPE), POINTER :: solverMappingDiffusion
+    TYPE(EQUATIONS_SET_TYPE), POINTER :: equationsSetDiffusion
+    TYPE(FIELD_TYPE), POINTER :: independentField
     TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: boundaryConditions
     TYPE(BoundaryConditionsRobinType), POINTER :: robinConditions
     REAL(DP) :: value
@@ -3517,6 +3522,13 @@ CONTAINS
     CALL SOLVERS_SOLVER_GET(solvers,2,solverDiffusion,err,error,*999)
     NULLIFY(solverEquationsDiffusion)
     CALL Solver_SolverEquationsGet(solverDiffusion,solverEquationsDiffusion,err,error,*999)
+    NULLIFY(solverMappingDiffusion)
+    CALL SolverEquations_SolverMappingGet(solverEquationsDiffusion,solverMappingDiffusion,err,error,*999)
+    NULLIFY(equationsSetDiffusion)
+    CALL SolverMapping_EquationsSetGet(solverMappingDiffusion,1,equationsSetDiffusion,err,error,*999)
+    !Get dependent, independent, source and geometric fields
+    NULLIFY(independentField)
+    CALL EquationsSet_IndependentFieldGet(equationsSetDiffusion,independentField,err,error,*999)
 
    !get robin conditions
     NULLIFY(boundaryConditions)
@@ -3530,6 +3542,15 @@ CONTAINS
     ! Update robin conditions
     CALL DistributedVector_AllValuesSet(robinConditions%convectionCoeff,schedule%convectionCoeff,err,error,*999)
     CALL DistributedVector_AllValuesSet(robinConditions%heatFlux,schedule%heatFlux,err,error,*999)
+
+    ! Update Tair and Pv
+    CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
+      & 5,schedule%Tair,err,error,*999)
+    CALL Field_ComponentValuesInitialise(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE, &
+      & 6,schedule%Pv,err,error,*999)
+
+    CALL Field_ParameterSetUpdateStart(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
+    CALL Field_ParameterSetUpdateFinish(independentField,FIELD_U_VARIABLE_TYPE,FIELD_VALUES_SET_TYPE,err,error,*999)
 
     EXITS("NavierStokesDiffAdvDiff_UpdateBoundary")
     RETURN

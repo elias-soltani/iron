@@ -1650,6 +1650,7 @@ CONTAINS
     INTEGER(INTG), POINTER :: COLUMN_INDICES(:),ROW_INDICES(:)
     REAL(DP) :: DEPENDENT_VALUE,MATRIX_VALUE,RHS_VALUE,SOURCE_VALUE
     REAL(DP), POINTER :: DEPENDENT_PARAMETERS(:),equationsMatrixData(:),sourceVectorData(:)
+    REAL(DP), POINTER :: hCoeff(:),qR(:)
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: RHS_BOUNDARY_CONDITIONS
     TYPE(DOMAIN_MAPPING_TYPE), POINTER :: COLUMN_DOMAIN_MAPPING,RHS_DOMAIN_MAPPING
     TYPE(DistributedMatrixType), POINTER :: EQUATIONS_DISTRIBUTED_MATRIX
@@ -1668,6 +1669,8 @@ CONTAINS
     TYPE(FIELD_TYPE), POINTER :: dependentField
     TYPE(FIELD_VARIABLE_TYPE), POINTER :: DEPENDENT_VARIABLE,rhsVariable
     TYPE(VARYING_STRING) :: localError
+
+    INTEGER(INTG) :: numberOfRobin,robinIdx
 
     NULLIFY(DEPENDENT_PARAMETERS)
     NULLIFY(equationsMatrixData)
@@ -1824,6 +1827,28 @@ CONTAINS
                                                 SOURCE_VALUE=sourceVectorData(equations_row_number)
                                                 RHS_VALUE=RHS_VALUE-SOURCE_VALUE
                                               ENDIF
+                                              !We need to change the boundary types to one of these: Internal node, Neumann, Robin, Mixed(Cauchy)
+                                              !Because Robin BCs are neither free or fixed type. Also, here condition is used instead of dof type for now.
+                                              !This part works for dynamic equations too, but for now it is implemented for static ones only.
+                                              SELECT CASE(RHS_BOUNDARY_CONDITIONS%condition_types(rhs_global_dof))
+                                              CASE(BOUNDARY_CONDITION_ROBIN)
+                                                !q=q_R-hT. For Robin BCs, using field variable we can find the flux. 
+                                                !Negative flux means the heat goes to the environment.
+                                                numberOfRobin=RHS_BOUNDARY_CONDITIONS%DOF_COUNTS(BOUNDARY_CONDITION_ROBIN)
+                                                RHS_VALUE=0.0_DP !If Robin, start over.
+                                                DO robinIdx=1,numberOfRobin
+                                                  IF (BOUNDARY_CONDITIONS%robinBoundaryConditions%setDofs(robinIdx)== &
+                                                    equations_row_number) EXIT
+                                                ENDDO
+                                                CALL DistributedVector_DataGet(BOUNDARY_CONDITIONS%robinBoundaryConditions% & 
+                                                  & convectionCoeff,hCoeff,err,error,*999)
+                                                CALL DistributedVector_DataGet(BOUNDARY_CONDITIONS%robinBoundaryConditions% &
+                                                  & heatFlux,qR,err,error,*999)
+                                                DEPENDENT_VALUE=DEPENDENT_PARAMETERS(equations_row_number)
+                                                RHS_VALUE=qR(robinIdx)-hCoeff(robinIdx)*DEPENDENT_VALUE
+                                              CASE DEFAULT
+                                                !Do nothing
+                                              END SELECT
                                               CALL Field_ParameterSetUpdateLocalDOF(dependentField,rhsVariableType, &
                                                 & FIELD_VALUES_SET_TYPE,rhs_variable_dof,RHS_VALUE,err,error,*999)
                                             ENDDO !equations_row_number

@@ -26,7 +26,7 @@
 !> Auckland, the University of Oxford and King's College, London.
 !> All Rights Reserved.
 !>
-!> Contributor(s):
+!> Contributor(s): Elias Soltani
 !>
 !> Alternatively, the contents of this file may be used under the terms of
 !> either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -11862,6 +11862,7 @@ CONTAINS
                                   & " is invalid."
                                 CALL FlagError(LOCAL_ERROR,ERR,ERROR,*999)
                               END SELECT
+!CALL DistributedVector_DataGet(rhsVector,RHS_DATA,ERR,ERROR,*999)
                               !Solver the linear system
 #ifdef TAUPROF
                               CALL TAU_STATIC_PHASE_START("KSPSOLVE")
@@ -12373,7 +12374,7 @@ CONTAINS
     REAL(DP) :: MatrixCoefficients(2)=[0.0_DP,0.0_DP]
     REAL(DP), POINTER :: FIELD_VALUES_VECTOR(:),PREVIOUS_VALUES_VECTOR(:),PREVIOUS_VELOCITY_VECTOR(:), &
       & PREVIOUS_ACCELERATION_VECTOR(:),RHS_PARAMETERS(:)
-    LOGICAL :: HAS_INTEGRATED_VALUES
+    LOGICAL :: HAS_INTEGRATED_VALUES,R_HAS_INTEGRATED_VALUES
     TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: BOUNDARY_CONDITIONS
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: RHS_BOUNDARY_CONDITIONS,DEPENDENT_BOUNDARY_CONDITIONS
     TYPE(DistributedMatrixType), POINTER :: PREVIOUS_SOLVER_DISTRIBUTED_MATRIX,SOLVER_DISTRIBUTED_MATRIX
@@ -12603,6 +12604,35 @@ CONTAINS
                                         IF(dynamicMapping%stiffnessMatrixNumber/=0) THEN
                                           STIFFNESS_MATRIX=>dynamicMatrices%matrices(dynamicMapping%stiffnessMatrixNumber)%ptr
                                           IF(ASSOCIATED(STIFFNESS_MATRIX)) THEN
+
+
+                                            rhsMapping=>vectorMapping%rhsMapping
+                                            IF(ASSOCIATED(rhsMapping)) THEN
+                                              BOUNDARY_CONDITIONS=>SOLVER_EQUATIONS%BOUNDARY_CONDITIONS
+                                              IF(ASSOCIATED(BOUNDARY_CONDITIONS)) THEN
+
+
+                                                RHS_VARIABLE=>rhsMapping%rhsVariable
+
+                                                CALL BOUNDARY_CONDITIONS_VARIABLE_GET(BOUNDARY_CONDITIONS,RHS_VARIABLE, &
+                                                  & RHS_BOUNDARY_CONDITIONS,ERR,ERROR,*999)
+                                                IF(ASSOCIATED(RHS_BOUNDARY_CONDITIONS)) THEN
+
+                                                  !Add K_h to the stiffness matrix=K_e+K_h.
+                                                    !Later on this updated matrix is used in solver_rhs_vector as well.
+                                                  CALL BoundaryConditions_RobinDynamicIntegrate(RHS_BOUNDARY_CONDITIONS, &
+                                                    & STIFFNESS_MATRIX,ERR,ERROR,*999)
+                                                ELSE
+                                                  CALL FlagError("RHS boundary conditions variable is not associated.",ERR,ERROR,*999)
+                                                ENDIF
+                                              ELSE
+                                                CALL FlagError("Equations set boundary conditions is not associated.",ERR,ERROR,*999)
+                                              ENDIF
+                                            ELSE
+                                              CALL FlagError("Equations mapping RHS mapping is not associated.",ERR,ERROR,*999)
+                                            ENDIF
+
+
                                             CALL SOLVER_MATRIX_EQUATIONS_MATRIX_ADD(SOLVER_MATRIX,equations_set_idx, &
                                               & STIFFNESS_MATRIX_COEFFICIENT,STIFFNESS_MATRIX,ERR,ERROR,*999)
                                           ELSE
@@ -12965,13 +12995,19 @@ CONTAINS
                                         RHS_DOMAIN_MAPPING=>RHS_VARIABLE%DOMAIN_MAPPING
                                         CALL FIELD_PARAMETER_SET_CREATED(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
                                           & FIELD_INTEGRATED_NEUMANN_SET_TYPE,HAS_INTEGRATED_VALUES,ERR,ERROR,*999)
+                                        CALL FIELD_PARAMETER_SET_CREATED(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
+                                          & FIELD_INTEGRATED_ROBIN_SET_TYPE,R_HAS_INTEGRATED_VALUES,ERR,ERROR,*999)
                                         EQUATIONS_RHS_VECTOR=>rhsVector%VECTOR
                                         CALL BOUNDARY_CONDITIONS_VARIABLE_GET(BOUNDARY_CONDITIONS,RHS_VARIABLE, &
                                           & RHS_BOUNDARY_CONDITIONS,ERR,ERROR,*999)
                                         IF(ASSOCIATED(RHS_BOUNDARY_CONDITIONS)) THEN
-                                          !Update RHS field by integrating any point Neumann conditions
+                                          !Update RHS field by integrating any point Neumann or Robin conditions
                                           CALL BoundaryConditions_NeumannIntegrate(RHS_BOUNDARY_CONDITIONS, &
                                             & ERR,ERROR,*999)
+
+                                          CALL BoundaryConditions_RobinIntegrate(RHS_BOUNDARY_CONDITIONS, &
+                                            & ERR,ERROR,*999)
+
                                           !Loop over the rows in the equations set
                                           DO equations_row_number=1,vectorMapping%totalNumberOfRows
                                             !Get the dynamic contribution to the RHS values
@@ -13088,6 +13124,14 @@ CONTAINS
                                                 !Add any Neumann integrated values, b = f + N q
                                                 CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
                                                   & FIELD_INTEGRATED_NEUMANN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
+                                                  & ERR,ERROR,*999)
+                                                RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
+                                              END IF
+
+                                              IF(R_HAS_INTEGRATED_VALUES) THEN
+                                                !Add any Robin integrated values, b = f + N q+R q_h
+                                                CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
+                                                  & FIELD_INTEGRATED_ROBIN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
                                                   & ERR,ERROR,*999)
                                                 RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
                                               END IF
@@ -13336,6 +13380,13 @@ CONTAINS
                                                   !Add any Neumann integrated values, b = f + N q
                                                   CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
                                                     & FIELD_INTEGRATED_NEUMANN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
+                                                    & ERR,ERROR,*999)
+                                                  VALUE=VALUE+RHS_INTEGRATED_VALUE*row_coupling_coefficient
+                                                END IF
+                                                IF(R_HAS_INTEGRATED_VALUES) THEN
+                                                  !Add any Robin integrated values, b = f + N q + R q_h
+                                                  CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
+                                                    & FIELD_INTEGRATED_ROBIN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
                                                     & ERR,ERROR,*999)
                                                   VALUE=VALUE+RHS_INTEGRATED_VALUE*row_coupling_coefficient
                                                 END IF
@@ -14040,7 +14091,7 @@ CONTAINS
     REAL(DP) :: DEPENDENT_VALUE,LINEAR_VALUE,LINEAR_VALUE_SUM,MATRIX_VALUE,RESIDUAL_VALUE,RHS_VALUE,row_coupling_coefficient, &
       & SOURCE_VALUE,VALUE,RHS_INTEGRATED_VALUE
     REAL(DP), POINTER :: RHS_PARAMETERS(:),CHECK_DATA(:),CHECK_DATA2(:),CHECK_DATA3(:),CHECK_DATA4(:)
-    LOGICAL :: SUBTRACT_FIXED_BCS_FROM_RESIDUAL,HAS_INTEGRATED_VALUES
+    LOGICAL :: SUBTRACT_FIXED_BCS_FROM_RESIDUAL,HAS_INTEGRATED_VALUES,R_HAS_INTEGRATED_VALUES !Elias
     TYPE(REAL_DP_PTR_TYPE), ALLOCATABLE :: DEPENDENT_PARAMETERS(:)
     TYPE(BOUNDARY_CONDITIONS_TYPE), POINTER :: BOUNDARY_CONDITIONS
     TYPE(BOUNDARY_CONDITIONS_VARIABLE_TYPE), POINTER :: DEPENDENT_BOUNDARY_CONDITIONS,RHS_BOUNDARY_CONDITIONS
@@ -14123,6 +14174,30 @@ CONTAINS
                           IF(ASSOCIATED(EQUATIONS_TO_SOLVER_MAP)) THEN
                             equationsMatrix=>EQUATIONS_TO_SOLVER_MAP%EQUATIONS_MATRIX
                             IF(ASSOCIATED(equationsMatrix)) THEN
+
+                              rhsMapping=>SOLVER_MAPPING%equations_sets(equations_set_idx)%ptr%equations% &
+                                & vectorequations%vectormapping%rhsmapping
+                              IF(ASSOCIATED(rhsMapping)) THEN
+                                BOUNDARY_CONDITIONS=>SOLVER_EQUATIONS%BOUNDARY_CONDITIONS
+                                IF(ASSOCIATED(BOUNDARY_CONDITIONS)) THEN
+                                  RHS_VARIABLE=>rhsMapping%rhsVariable
+                                  CALL BOUNDARY_CONDITIONS_VARIABLE_GET(BOUNDARY_CONDITIONS,RHS_VARIABLE, &
+                                    & RHS_BOUNDARY_CONDITIONS,ERR,ERROR,*999)
+                                  IF(ASSOCIATED(RHS_BOUNDARY_CONDITIONS)) THEN
+                                    !Add K_R to the stiffness matrix=K_e+K_R.
+                                      !Later on this updated matrix is used in solver_rhs_vector as well.
+                                    CALL BoundaryConditions_RobinDynamicIntegrate(RHS_BOUNDARY_CONDITIONS, &
+                                      & equationsMatrix,ERR,ERROR,*999)
+                                  ELSE
+                                    CALL FlagError("RHS boundary conditions variable is not associated.",ERR,ERROR,*999)
+                                  ENDIF
+                                ELSE
+                                  CALL FlagError("Equations set boundary conditions is not associated.",ERR,ERROR,*999)
+                                ENDIF
+                              ELSE
+                                CALL FlagError("Equations mapping RHS mapping is not associated.",ERR,ERROR,*999)
+                              ENDIF
+
                               CALL SOLVER_MATRIX_EQUATIONS_MATRIX_ADD(SOLVER_MATRIX,equations_set_idx,1.0_DP,equationsMatrix, &
                                 & ERR,ERROR,*999)
                             ELSE
@@ -14642,12 +14717,16 @@ CONTAINS
                                     ! Check if there are any integrated values to add
                                     CALL FIELD_PARAMETER_SET_CREATED(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
                                       & FIELD_INTEGRATED_NEUMANN_SET_TYPE,HAS_INTEGRATED_VALUES,ERR,ERROR,*999)
+                                    CALL FIELD_PARAMETER_SET_CREATED(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
+                                      & FIELD_INTEGRATED_ROBIN_SET_TYPE,R_HAS_INTEGRATED_VALUES,ERR,ERROR,*999)
                                     EQUATIONS_RHS_VECTOR=>rhsVector%VECTOR
                                     CALL BOUNDARY_CONDITIONS_VARIABLE_GET(BOUNDARY_CONDITIONS,RHS_VARIABLE, &
                                       & RHS_BOUNDARY_CONDITIONS,ERR,ERROR,*999)
                                     IF(ASSOCIATED(RHS_BOUNDARY_CONDITIONS)) THEN
                                       !Update RHS field by integrating any point Neumann conditions
                                       CALL BoundaryConditions_NeumannIntegrate(RHS_BOUNDARY_CONDITIONS, &
+                                        & ERR,ERROR,*999)
+                                      CALL BoundaryConditions_RobinIntegrate(RHS_BOUNDARY_CONDITIONS, &
                                         & ERR,ERROR,*999)
                                       !Loop over the rows in the equations set
                                       DO equations_row_number=1,vectorMapping%totalNumberOfRows
@@ -14686,6 +14765,13 @@ CONTAINS
                                             !Add any Neumann integrated values, b = f + N q
                                             CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
                                               & FIELD_INTEGRATED_NEUMANN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
+                                              & ERR,ERROR,*999)
+                                            RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
+                                          END IF
+                                          IF(R_HAS_INTEGRATED_VALUES) THEN
+                                            !Add any Robin integrated values, b = f + N q+R q_R
+                                            CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
+                                              & FIELD_INTEGRATED_ROBIN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
                                               & ERR,ERROR,*999)
                                             RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
                                           END IF
@@ -14853,6 +14939,13 @@ CONTAINS
                                           IF(HAS_INTEGRATED_VALUES) THEN
                                             CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
                                               & FIELD_INTEGRATED_NEUMANN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
+                                              & ERR,ERROR,*999)
+                                            RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
+                                          END IF
+                                          IF(R_HAS_INTEGRATED_VALUES) THEN
+                                            !Add any Robin integrated values, b = f + N q + R q_h
+                                            CALL FIELD_PARAMETER_SET_GET_LOCAL_DOF(RHS_VARIABLE%FIELD,RHS_VARIABLE_TYPE, &
+                                              & FIELD_INTEGRATED_ROBIN_SET_TYPE,rhs_variable_dof,RHS_INTEGRATED_VALUE, &
                                               & ERR,ERROR,*999)
                                             RHS_VALUE=RHS_VALUE+RHS_INTEGRATED_VALUE
                                           END IF
